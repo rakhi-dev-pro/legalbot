@@ -1,0 +1,121 @@
+services:
+  # 1. Reverse Proxy Service: Nginx with HTTPS (SSL Termination on Port 443)
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: legalbot_proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+      - frontend
+
+  # 2. Database Service: PostgreSQL 17 + pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: legalbot_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-legalbot}
+      POSTGRES_USER: ${POSTGRES_USER:-legal_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-legalbot_secure_pass_2026}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-legal_admin} -d ${POSTGRES_DB:-legalbot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 3. Cache & Queue Service: Redis 7
+  redis:
+    image: redis:7-alpine
+    container_name: legalbot_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 4. Local LLM Hosting Service: Official ghcr.io/ggml-org/llama.cpp:server
+  llm-service:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: legalbot_llm
+    restart: unless-stopped
+    ports:
+      - "${LLAMA_CPP_PORT:-8080}:8080"
+    volumes:
+      - ./models:/models
+    command: >
+      --model /models/${LLM_MODEL_FILE:-granite-4.1-3b-Q6_K.gguf}
+      --host 0.0.0.0
+      --port 8080
+      -c ${LLM_CTX_SIZE:-4096}
+    # Uncomment below if running on host with NVIDIA GPU acceleration:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # 5. Backend Service: FastAPI App with Live Hot-Reloading
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: legalbot_backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-legal_admin}:${POSTGRES_PASSWORD:-legalbot_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-legalbot}
+      - REDIS_URL=redis://redis:6379/0
+      - LLAMA_CPP_URL=http://llm-service:8080
+      - SECRET_KEY=${SECRET_KEY:-super_secret_legalbot_jwt_key}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # 6. Frontend Service: React + Vite Dev Server with HMR
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: legalbot_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_API_URL=https://localhost
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:
