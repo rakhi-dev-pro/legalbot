@@ -15,9 +15,12 @@ from services.text_chunker import create_document_chunks, extract_contract_entit
 
 logger = logging.getLogger("legalbot.nlp_pipeline")
 
+# Controlled concurrency semaphore to prevent llama.cpp slot collisions and task cancellations
+_LLM_SEMAPHORE = asyncio.Semaphore(1)
 
-async def call_llama_cpp_completion(prompt: str, system_prompt: str = "You are an expert legal AI assistant.", max_tokens: int = 500, timeout: float = 20.0) -> str:
-    """Call local llama.cpp server for text generation."""
+
+async def call_llama_cpp_completion(prompt: str, system_prompt: str = "You are an expert legal AI assistant.", max_tokens: int = 250, timeout: float = 12.0) -> str:
+    """Call local llama.cpp server for text generation with controlled concurrency."""
     url = f"{settings.LLAMA_CPP_URL}/v1/chat/completions"
     payload = {
         "messages": [
@@ -28,13 +31,14 @@ async def call_llama_cpp_completion(prompt: str, system_prompt: str = "You are a
         "temperature": 0.2
     }
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(url, json=payload)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
-        else:
-            raise RuntimeError(f"llama.cpp error {resp.status_code}: {resp.text}")
+    async with _LLM_SEMAPHORE:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                return data["choices"][0]["message"]["content"].strip()
+            else:
+                raise RuntimeError(f"llama.cpp error {resp.status_code}: {resp.text}")
 
 
 # ---------------------------------------------------------------------------
@@ -45,21 +49,21 @@ CATEGORY_KEYWORDS = {
     "indemnity": lambda t: "indemnif" in t or "hold harmless" in t,
     "termination": lambda t: ("terminat" in t and ("without cause" in t or "at any time" in t or "written notice" in t or "notice" in t or "automatically terminated" in t or "in lieu" in t or "policy" in t)) or "notice to vacate" in t,
     "liability": lambda t: "limitation of liability" in t or "maximum liability" in t or "consequential damages" in t,
-    "eviction": lambda t: ("evict" in t) or ("vacate" in t and ("notice" in t or "handover" in t or "possession" in t)),
-    "late rent": lambda t: ("late fee" in t or "interest on default" in t) or ("late" in t and "rent" in t and ("penalty" in t or "default" in t)),
-    "deposit": lambda t: "security deposit" in t or ("deposit" in t and ("forfeiture" in t or "deduction" in t or "refund" in t)),
-    "non-compete": lambda t: "non-compete" in t or "non-solicitation" in t or ("solicit" in t and ("client" in t or "employee" in t)),
-    "auto": lambda t: "auto" in t and "renew" in t,
+    "eviction": lambda t: ("evict" in t) or ("vacate" in t and ("notice" in t or "handover" in t or "possession" in t or "premises" in t)),
+    "late rent": lambda t: ("late fee" in t or "interest on default" in t) or (bool(re.search(r'\blate\b', t)) and "rent" in t and ("penalty" in t or "default" in t)),
+    "deposit": lambda t: "security deposit" in t or (bool(re.search(r'\bdeposit\b', t)) and bool(re.search(r'\b(forfeit|deduct|refund|withhold)\b', t))),
+    "non-compete": lambda t: "non-compete" in t or "non-solicitation" in t or ("solicit" in t and ("client" in t or "employee" in t or "customer" in t)),
+    "auto": lambda t: bool(re.search(r'\b(auto-renew|automatic renewal|automatically renews?)\b', t, re.IGNORECASE)),
     "governing law": lambda t: "governing law" in t or "jurisdiction" in t,
-    "confidentiality": lambda t: "confidential" in t or "non-disclosure" in t or "nda" in t or "proprietary" in t,
+    "confidentiality": lambda t: bool(re.search(r'\b(confidential|non-disclosure|nda|trade secrets?|proprietary information)\b', t, re.IGNORECASE)),
     "arbitration": lambda t: "arbitrat" in t and ("dispute" in t or "binding" in t),
     "force majeure": lambda t: "force majeure" in t,
     "rent escalation": lambda t: ("rent" in t and ("increment" in t or "increase" in t or "escalat" in t)),
-    "subleas": lambda t: "sublet" in t or "subleas" in t or "assignment restriction" in t,
+    "subleas": lambda t: "sublet" in t or "subleas" in t or "assignment restriction" in t or "assign or transfer" in t,
     "maintenance": lambda t: ("repair" in t and ("tenant" in t or "second party" in t or "cost" in t)),
-    "landlord entry": lambda t: ("inspect" in t and ("landlord" in t or "first party" in t or "premises" in t)),
-    "utilit": lambda t: ("utilit" in t or "maintenance fee" in t) and ("tenant" in t or "second party" in t),
-    "probation": lambda t: "probation" in t or "probationary" in t,
+    "landlord entry": lambda t: ("inspect" in t or "entry" in t or "access" in t) and ("landlord" in t or "first party" in t or "premises" in t or "property" in t),
+    "utilit": lambda t: bool(re.search(r'\b(utilit(y|ies)|electricity|water charges?|maintenance fee)\b', t, re.IGNORECASE)) and ("tenant" in t or "second party" in t or "occupant" in t),
+    "probation": lambda t: bool(re.search(r'\b(probation|probationary)\b', t, re.IGNORECASE)),
     "intellectual property": lambda t: "intellectual property" in t or "ip assignment" in t or "inventions" in t or "work product" in t,
 }
 

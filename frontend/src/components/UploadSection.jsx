@@ -75,12 +75,12 @@ export default function UploadSection({ onAnalysisComplete, onOpenAuth, isAuthen
 
       // 3. Poll for results
       let retries = 0;
-      const maxRetries = 30;
+      const maxRetries = 90; // Allow up to 180 seconds for complete AI analysis
       let finalReport = null;
 
       while (retries < maxRetries) {
         retries++;
-        setProgressText(`Processing document with llama.cpp server... (Attempt ${retries}/${maxRetries})`);
+        setProgressText(`Processing document with local LLM server... (Attempt ${retries}/${maxRetries})`);
         await new Promise((res) => setTimeout(res, 2000));
 
         try {
@@ -90,7 +90,7 @@ export default function UploadSection({ onAnalysisComplete, onOpenAuth, isAuthen
             break;
           }
         } catch (pollErr) {
-          // Status 202 expected while processing
+          // Status 202 expected while processing in background
           if (pollErr.response && pollErr.response.status === 202) {
             continue;
           }
@@ -104,7 +104,7 @@ export default function UploadSection({ onAnalysisComplete, onOpenAuth, isAuthen
           onAnalysisComplete(finalReport);
         }, 800);
       } else {
-        throw new Error('AI Analysis timed out while processing long legal clauses.');
+        throw new Error('AI Analysis is taking longer than expected. Please check your Dashboard to view the report once ready.');
       }
     } catch (err) {
       console.error('Pipeline error:', err);

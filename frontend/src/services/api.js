@@ -89,6 +89,30 @@ export const fetchDocumentChunks = async (docId) => {
   return response.data;
 };
 
+export const fetchDocumentPdfBlob = async (docId) => {
+  const response = await api.get(`/docs/${docId}/pdf`, {
+    responseType: 'blob',
+  });
+  return response.data;
+};
+
+export const fetchDocumentHighlights = async (docId) => {
+  const response = await api.get(`/docs/${docId}/highlights`);
+  return response.data;
+};
+
+export const fetchAnnotatedPdfBlob = async (docId, selectedClauseIds = []) => {
+  const params = {};
+  if (selectedClauseIds && selectedClauseIds.length > 0) {
+    params.clause_ids = selectedClauseIds.join(',');
+  }
+  const response = await api.get(`/docs/${docId}/annotated-pdf`, {
+    params,
+    responseType: 'blob',
+  });
+  return response.data;
+};
+
 // --- AI Analysis & Report Endpoints ---
 export const triggerDocumentAnalysis = async (docId) => {
   const response = await api.post(`/reports/analyze/${docId}`);

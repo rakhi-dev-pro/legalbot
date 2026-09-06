@@ -1,14 +1,15 @@
 import uuid
 from typing import List
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import User, Document, DocumentChunk
+from models import User, Document, DocumentChunk, AnalysisReport, RiskClause
 from schemas.document import DocumentResponse, DocumentDetailResponse
 from dependencies.auth import get_current_user
-from services.file_service import save_encrypted_file, compute_sha256, delete_encrypted_file
+from services.file_service import save_encrypted_file, compute_sha256, delete_encrypted_file, read_decrypted_file
+from services.pdf_highlighter import extract_pdf_highlights, generate_annotated_pdf
 
 router = APIRouter(prefix="/docs", tags=["Document Management & Ingestion"])
 
@@ -160,3 +161,151 @@ async def delete_document(
     await db.commit()
 
     return {"status": "success", "message": f"Document {doc_id} deleted successfully"}
+
+
+@router.get("/{doc_id}/pdf")
+async def get_document_pdf(
+    doc_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Stream decrypted PDF bytes for direct rendering in React with pdfjs-dist.
+    """
+    doc_res = await db.execute(
+        select(Document).where(Document.id == doc_id, Document.user_id == current_user.id)
+    )
+    doc = doc_res.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    if doc.file_type.upper() != "PDF":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document is not a PDF")
+
+    try:
+        file_bytes = read_decrypted_file(doc.storage_path)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to decrypt document: {e}")
+
+    safe_filename = doc.original_filename or "contract.pdf"
+    return Response(
+        content=file_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_filename}"',
+            "Cache-Control": "private, max-age=3600",
+            "Content-Length": str(len(file_bytes))
+        }
+    )
+
+
+@router.get("/{doc_id}/highlights")
+async def get_document_highlights(
+    doc_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Extract exact bounding boxes and coordinates for all detected risk clauses
+    using PyMuPDF (fitz) so React can render interactive, clickable highlights on the PDF.
+    """
+    doc_res = await db.execute(
+        select(Document).where(Document.id == doc_id, Document.user_id == current_user.id)
+    )
+    doc = doc_res.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    # Get analysis report and risk clauses
+    report_res = await db.execute(
+        select(AnalysisReport).where(AnalysisReport.document_id == doc_id)
+    )
+    report = report_res.scalar_one_or_none()
+    if not report:
+        return []
+
+    clauses_res = await db.execute(
+        select(RiskClause).where(RiskClause.report_id == report.id)
+    )
+    clauses = clauses_res.scalars().all()
+    clauses_data = [
+        {
+            "id": str(c.id),
+            "clause_type": c.clause_type,
+            "clause_text": c.clause_text,
+            "explanation": c.explanation,
+            "risk_level": c.risk_level,
+            "confidence_score": c.confidence_score,
+            "page_number": c.page_number,
+            "recommendation": c.recommendation
+        }
+        for c in clauses
+    ]
+
+    try:
+        file_bytes = read_decrypted_file(doc.storage_path)
+        page_highlights = extract_pdf_highlights(file_bytes, clauses_data)
+        return page_highlights
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to generate highlights: {e}")
+
+
+@router.get("/{doc_id}/annotated-pdf")
+async def get_annotated_pdf(
+    doc_id: uuid.UUID,
+    clause_ids: str = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate and stream an annotated PDF with native PyMuPDF highlights
+    and risk description popups. Supports filtering by selected clause IDs.
+    """
+    doc_res = await db.execute(
+        select(Document).where(Document.id == doc_id, Document.user_id == current_user.id)
+    )
+    doc = doc_res.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    report_res = await db.execute(
+        select(AnalysisReport).where(AnalysisReport.document_id == doc_id)
+    )
+    report = report_res.scalar_one_or_none()
+    clauses_data = []
+    if report:
+        clauses_res = await db.execute(
+            select(RiskClause).where(RiskClause.report_id == report.id)
+        )
+        clauses_data = [
+            {
+                "id": str(c.id),
+                "clause_type": c.clause_type,
+                "clause_text": c.clause_text,
+                "explanation": c.explanation,
+                "risk_level": c.risk_level,
+                "page_number": c.page_number,
+                "recommendation": c.recommendation
+            }
+            for c in clauses_res.scalars().all()
+        ]
+
+    selected_ids = [cid.strip() for cid in clause_ids.split(",") if cid.strip()] if clause_ids else None
+
+    try:
+        file_bytes = read_decrypted_file(doc.storage_path)
+        annotated_bytes = generate_annotated_pdf(file_bytes, clauses_data, selected_clause_ids=selected_ids)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to generate annotated PDF: {e}")
+
+    safe_name = f"annotated_{doc.original_filename or 'document.pdf'}"
+    return Response(
+        content=annotated_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_name}"',
+            "Cache-Control": "no-cache",
+            "Content-Length": str(len(annotated_bytes))
+        }
+    )
+

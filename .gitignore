@@ -4,8 +4,10 @@ testing_instructions.txt
 samples/*
 models/*.gguf
 frontend/node_modules/*
+frontend/dist/*
 backend/__pycache__/*
 certs/*
+frontend/certs/*
 .env
 backend/services/__pycache__/*
 backend/models/__pycache__/*
