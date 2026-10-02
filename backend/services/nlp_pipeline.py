@@ -1,10 +1,11 @@
+import re
 import time
 import json
 import uuid
 import asyncio
 import logging
 import httpx
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -19,8 +20,14 @@ logger = logging.getLogger("legalbot.nlp_pipeline")
 _LLM_SEMAPHORE = asyncio.Semaphore(1)
 
 
-async def call_llama_cpp_completion(prompt: str, system_prompt: str = "You are an expert legal AI assistant.", max_tokens: int = 250, timeout: float = 12.0) -> str:
+async def call_llama_cpp_completion(
+    prompt: str,
+    system_prompt: str = "You are an expert legal AI assistant.",
+    max_tokens: int = 250,
+    timeout: float = None
+) -> str:
     """Call local llama.cpp server for text generation with controlled concurrency."""
+    actual_timeout = timeout if timeout is not None else getattr(settings, "LLM_TIMEOUT_SECONDS", 90.0)
     url = f"{settings.LLAMA_CPP_URL}/v1/chat/completions"
     payload = {
         "messages": [
@@ -32,7 +39,7 @@ async def call_llama_cpp_completion(prompt: str, system_prompt: str = "You are a
     }
 
     async with _LLM_SEMAPHORE:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(timeout=actual_timeout) as client:
             resp = await client.post(url, json=payload)
             if resp.status_code == 200:
                 data = resp.json()
@@ -115,7 +122,8 @@ async def classify_chunk_with_llm(chunk_text: str, active_rules: list):
         raw = await call_llama_cpp_completion(
             prompt=prompt,
             system_prompt="You are a precise contract-risk classifier. Reply with a raw JSON array only.",
-            max_tokens=200
+            max_tokens=120,
+            timeout=30.0
         )
         matched = json.loads(_strip_json_fences(raw))
         if not isinstance(matched, list):
@@ -153,26 +161,74 @@ def deduplicate_clauses(raw_clauses: list) -> list:
     return list(category_map.values())
 
 
-async def generate_clause_recommendation(clause_category: str, clause_text: str) -> str:
-    """Generate an actionable recommendation for a detected risk clause."""
-    snippet = clause_text[:800]
+# Curated domain-specific legal recommendations used for fast fallback and guidance
+CATEGORY_RECOMMENDATIONS = {
+    "indemnity": "Request mutual indemnification and negotiate an aggregate liability cap limited to fees paid under this agreement.",
+    "termination": "Negotiate a mandatory written notice period of at least 30 days prior to any termination without cause.",
+    "liability": "Ensure liability is mutually capped and consequential, punitive, or indirect damages are explicitly disclaimed.",
+    "eviction": "Ensure formal notice and a minimum 30-day cure period are required prior to any eviction or possession handover.",
+    "late rent": "Verify that a reasonable grace period (e.g., 5-10 business days) is provided before default interest or late fees apply.",
+    "deposit": "Define explicit timelines (e.g., 14-30 days) and require an itemized written statement for any security deposit deductions.",
+    "non-compete": "Negotiate to narrow the non-compete duration (maximum 6 months) and restrict its geographic and industry scope.",
+    "auto": "Require the counterparty to provide written advance reminder notice (at least 30 days) prior to any automatic renewal.",
+    "governing law": "Confirm that the designated governing law and dispute jurisdiction are convenient and appropriate for both parties.",
+    "confidentiality": "Ensure non-disclosure obligations are bilateral and carve out standard exclusions (public domain, prior possession).",
+    "arbitration": "Ensure arbitration rules are balanced, with costs shared equally and proceedings held in a neutral forum.",
+    "force majeure": "Ensure force majeure provisions protect both parties equally against unforeseeable disruptions.",
+    "rent escalation": "Cap future rent escalations to a predefined percentage or tie increments to official inflation indexes.",
+    "subleas": "Request that assignment or subleasing permissions cannot be unreasonably withheld, conditioned, or delayed.",
+    "maintenance": "Clarify that the landlord is responsible for major structural repairs and the tenant only for minor upkeep.",
+    "landlord entry": "Require at least 24 to 48 hours prior written notice before landlord entry, except in genuine emergencies.",
+    "utilit": "Ensure utility metering is individual and based on verified actual consumption rates rather than arbitrary flat charges.",
+    "probation": "Clarify objective, measurable performance criteria and notice standards required to complete the probationary period.",
+    "intellectual property": "Ensure IP assignment applies strictly to work product created during working hours using employer equipment.",
+}
+
+
+def get_default_recommendation(category: str) -> str:
+    cat_lower = category.lower()
+    for key, rec in CATEGORY_RECOMMENDATIONS.items():
+        if key in cat_lower:
+            return rec
+    return f"Review this {category} clause carefully with your legal counsel before signing."
+
+
+async def generate_batched_clause_recommendations(detected_clauses: list) -> dict:
+    """Generate actionable recommendations for all detected risk clauses in a single batched LLM call."""
+    if not detected_clauses:
+        return {}
+
+    clause_summaries = []
+    for c in detected_clauses[:6]:
+        cat = c["category"]
+        snippet = c["clause_text"][:250].replace("\n", " ").strip()
+        clause_summaries.append(f"- Category: \"{cat}\" | Excerpt: \"{snippet}\"")
+
     prompt = (
-        f"You are a legal counsel advising a client reviewing a contract/employment offer.\n"
-        f"A risk clause of type \"{clause_category}\" was detected.\n\n"
-        f"CLAUSE TEXT:\n\"{snippet}\"\n\n"
-        f"Provide exactly 2-3 concise, actionable sentences recommending what the client should do. "
-        f"Focus on negotiation points, protective amendments, or red flags to escalate to a lawyer. "
-        f"Do NOT repeat the clause text. Be direct and practical."
+        "You are senior legal counsel advising a client reviewing a contract.\n"
+        "For each risk clause below, provide exactly 1-2 actionable, concise negotiation recommendations "
+        "(amendments, safeguards, or red flags).\n\n"
+        "RISK CLAUSES:\n" + "\n".join(clause_summaries) + "\n\n"
+        "Return a valid JSON object where keys are the exact Category names and values are the recommendation strings.\n"
+        "Example:\n{\n  \"Non-Compete\": \"Negotiate to shorten restriction period to 6 months.\"\n}\n"
+        "Reply with a raw JSON object only. No markdown fences, no explanation."
     )
+
     try:
-        return await call_llama_cpp_completion(
+        raw = await call_llama_cpp_completion(
             prompt=prompt,
-            system_prompt="You are a senior legal advisor. Give brief, actionable contract review guidance.",
-            max_tokens=150
+            system_prompt="You are a precise legal counsel. Reply with a raw JSON object mapping categories to advice.",
+            max_tokens=250,
+            timeout=35.0
         )
+        parsed = json.loads(_strip_json_fences(raw))
+        if isinstance(parsed, dict):
+            return parsed
     except Exception as e:
-        logger.warning(f"LLM recommendation generation failed for {clause_category}: {e}")
-        return f"Review this {clause_category} clause carefully with your legal counsel before signing."
+        logger.warning(f"Batched LLM recommendation generation fallback used: {e}")
+
+    # Curated domain-specific legal recommendations fallback
+    return {c["category"]: get_default_recommendation(c["category"]) for c in detected_clauses}
 
 
 async def process_document_ai_analysis(doc_id: uuid.UUID, async_session_factory):
@@ -198,6 +254,13 @@ async def process_document_ai_analysis(doc_id: uuid.UUID, async_session_factory)
                 return
 
             document.status = DocumentStatus.PROCESSING
+            document.error_message = None
+
+            # Idempotent cleanup: Delete prior chunks and reports for this document
+            await session.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_id))
+            old_reports_res = await session.execute(select(AnalysisReport).where(AnalysisReport.document_id == doc_id))
+            for old_rep in old_reports_res.scalars().all():
+                await session.delete(old_rep)
             await session.commit()
 
             # 2. Read & Extract Text
@@ -234,25 +297,22 @@ async def process_document_ai_analysis(doc_id: uuid.UUID, async_session_factory)
                 executive_summary = await call_llama_cpp_completion(
                     prompt=summary_prompt,
                     system_prompt="You are an expert legal document analyst. Be concise, clear, and plain-English.",
-                    max_tokens=400
+                    max_tokens=350,
+                    timeout=getattr(settings, "LLM_TIMEOUT_SECONDS", 90.0)
                 )
             except Exception as e:
                 logger.warning(f"Local LLM summarization fallback used: {e}")
                 executive_summary = f"Summary of {document.original_filename}: Legal agreement containing {len(chunks_data)} clause sections."
 
             # 5. Hybrid Risk Clause Classification
-            # Takes the union of Keyword Rule Matches and LLM Zero-Shot Matches so no risk clause is missed!
+            # First, evaluate fast deterministic keyword rules across all chunks
             rules_res = await session.execute(select(RiskRulesConfig).where(RiskRulesConfig.is_active == True))
             active_rules = rules_res.scalars().all()
 
             raw_detected_clauses = []
+            chunks_needing_llm = []
 
-            classification_tasks = [
-                classify_chunk_with_llm(chunk["text"], active_rules) for chunk in chunks_data
-            ]
-            classification_results = await asyncio.gather(*classification_tasks, return_exceptions=True)
-
-            for chunk, llm_result in zip(chunks_data, classification_results):
+            for chunk in chunks_data:
                 chunk_text_lower = chunk["text"].lower()
                 matched_rule_ids = set()
                 matched_rules = []
@@ -263,14 +323,29 @@ async def process_document_ai_analysis(doc_id: uuid.UUID, async_session_factory)
                         matched_rules.append(rule)
                         matched_rule_ids.add(rule.id)
 
-                # 2. Add LLM Zero-Shot Matches
-                if isinstance(llm_result, list):
-                    for rule in active_rules:
-                        if rule.category in llm_result and rule.id not in matched_rule_ids:
-                            matched_rules.append(rule)
-                            matched_rule_ids.add(rule.id)
+                chunk["matched_rules"] = matched_rules
+                chunk["matched_rule_ids"] = matched_rule_ids
 
-                for rule in matched_rules:
+                # If no keyword matched but the chunk contains substantive legal text, queue for zero-shot LLM check
+                if not matched_rules and chunk.get("token_count", 0) >= 30:
+                    chunks_needing_llm.append(chunk)
+
+            # Cap zero-shot LLM fallback to at most 2 ambiguous chunks to preserve fast execution on CPU
+            if chunks_needing_llm:
+                selected_llm_chunks = chunks_needing_llm[:2]
+                llm_tasks = [
+                    classify_chunk_with_llm(chunk["text"], active_rules) for chunk in selected_llm_chunks
+                ]
+                classification_results = await asyncio.gather(*llm_tasks, return_exceptions=True)
+                for chunk, llm_result in zip(selected_llm_chunks, classification_results):
+                    if isinstance(llm_result, list):
+                        for rule in active_rules:
+                            if rule.category in llm_result and rule.id not in chunk["matched_rule_ids"]:
+                                chunk["matched_rules"].append(rule)
+                                chunk["matched_rule_ids"].add(rule.id)
+
+            for chunk in chunks_data:
+                for rule in chunk["matched_rules"]:
                     raw_detected_clauses.append({
                         "category": rule.category,
                         "clause_text": chunk["text"],
@@ -280,20 +355,22 @@ async def process_document_ai_analysis(doc_id: uuid.UUID, async_session_factory)
                         "page_number": chunk["page_number"]
                     })
 
-            # 6. Deduplicate & Recommend
+            # 6. Deduplicate & Batched Recommendation Generation
             detected_clauses = deduplicate_clauses(raw_detected_clauses)
             total_risk_count = len(detected_clauses)
             has_high_risk = any(c["risk_level"] == "High" for c in detected_clauses)
 
-            rec_tasks = [
-                generate_clause_recommendation(c["category"], c["clause_text"])
-                for c in detected_clauses
-            ]
-            recommendations = await asyncio.gather(*rec_tasks, return_exceptions=True)
-            for idx, c in enumerate(detected_clauses):
-                rec = recommendations[idx]
-                c["recommendation"] = rec if isinstance(rec, str) and rec.strip() else \
-                    f"Review this {c['category']} clause carefully with your legal counsel before signing."
+            # Generate recommendations in a single batched prompt (takes ~20s total instead of 140s)
+            recommendations_map = await generate_batched_clause_recommendations(detected_clauses)
+            for c in detected_clauses:
+                cat = c["category"]
+                rec = recommendations_map.get(cat)
+                if not rec:
+                    for k, v in recommendations_map.items():
+                        if k.lower() == cat.lower():
+                            rec = v
+                            break
+                c["recommendation"] = rec or get_default_recommendation(cat)
 
             if has_high_risk or total_risk_count >= 3:
                 overall_risk = "High"

@@ -17,6 +17,7 @@ router = APIRouter(prefix="/reports", tags=["AI Risk Reports & Analysis"])
 async def trigger_document_analysis(
     doc_id: uuid.UUID,
     background_tasks: BackgroundTasks,
+    force: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -24,6 +25,7 @@ async def trigger_document_analysis(
     Trigger Asynchronous AI Document Analysis Pipeline (Requires Bearer JWT Token):
     - Validates document ownership and status.
     - Dispatches 7-stage NLP analysis engine as a background task.
+    - Supports force=True to restart an analysis if previous execution was interrupted.
     - Returns HTTP 202 Accepted with document status tracking.
     """
     result = await db.execute(
@@ -33,10 +35,10 @@ async def trigger_document_analysis(
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-    if doc.status == "processing":
+    if doc.status == "processing" and not force:
         return {
             "status": "processing",
-            "message": "AI Document Analysis is currently in progress.",
+            "message": "AI Document Analysis is currently in progress. Pass ?force=true to restart if stuck.",
             "document_id": str(doc_id)
         }
 
@@ -69,8 +71,9 @@ async def get_report_by_document_id(
         select(AnalysisReport)
         .options(selectinload(AnalysisReport.risk_clauses))
         .where(AnalysisReport.document_id == doc_id)
+        .order_by(AnalysisReport.completed_at.desc())
     )
-    report = result.scalar_one_or_none()
+    report = result.scalars().first()
 
     if not report:
         if doc.status in ("pending", "processing"):

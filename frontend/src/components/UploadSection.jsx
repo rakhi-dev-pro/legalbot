@@ -75,12 +75,13 @@ export default function UploadSection({ onAnalysisComplete, onOpenAuth, isAuthen
 
       // 3. Poll for results
       let retries = 0;
-      const maxRetries = 90; // Allow up to 180 seconds for complete AI analysis
+      const maxRetries = 180; // Allow up to 360 seconds for complete local CPU AI analysis
       let finalReport = null;
 
       while (retries < maxRetries) {
         retries++;
-        setProgressText(`Processing document with local LLM server... (Attempt ${retries}/${maxRetries})`);
+        const elapsedSec = retries * 2;
+        setProgressText(`Analyzing contract with local AI engine... (${elapsedSec}s elapsed)`);
         await new Promise((res) => setTimeout(res, 2000));
 
         try {

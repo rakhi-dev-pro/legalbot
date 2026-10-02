@@ -54,6 +54,11 @@ def _is_section_heading(text: str) -> bool:
     return bool(re.match(r'^(\d+[\.\)]|\([a-zA-Z0-9]+\)|Section\s+\d+|Article\s+[IVXLCDM\d]+|[A-Z][A-Za-z\s]{2,30}:)', s, re.IGNORECASE))
 
 
+def _is_signature_footer(text: str) -> bool:
+    s = text.lower()
+    return "esign" in s or "aadhaar" in s or "leegality" in s or bool(re.search(r'date:\s+[a-z]{3}\s+[a-z]{3}\s+\d+', s))
+
+
 def _find_paragraph_rects(page: fitz.Page, tp: Any, clause_type: str, explanation: str, full_clause_text: str) -> List[fitz.Rect]:
     """
     Find all line rects for the specific paragraph matching the risk clause.
@@ -61,13 +66,21 @@ def _find_paragraph_rects(page: fitz.Page, tp: Any, clause_type: str, explanatio
     numbered/section boundaries.
     """
     try:
-        blocks = page.get_text("blocks", textpage=tp) if tp else page.get_text("blocks")
+        raw_blocks = page.get_text("blocks", textpage=tp) if tp else page.get_text("blocks")
     except Exception as e:
         logger.debug(f"Error getting blocks on page {page.number+1}: {e}")
         return []
 
-    if not blocks:
+    if not raw_blocks:
         return []
+
+    # 1. Filter out digital signature stamps / eSign footers so they never get highlighted as clause paragraphs
+    filtered_blocks = [b for b in raw_blocks if not _is_signature_footer(b[4])]
+    if not filtered_blocks:
+        filtered_blocks = raw_blocks
+
+    # 2. Sort blocks geometrically from top to bottom, then left to right
+    blocks = sorted(filtered_blocks, key=lambda b: (round(b[1], 1), round(b[0], 1)))
 
     kw = _get_keywords_for_clause(clause_type, explanation)
 
@@ -106,7 +119,8 @@ def _find_paragraph_rects(page: fitz.Page, tp: Any, clause_type: str, explanatio
         gap = blocks[curr][1] - blocks[prev][3]
         prev_is_heading = _is_section_heading(blocks[prev][4])
         curr_is_heading = _is_section_heading(blocks[curr][4])
-        if gap > 20 or (curr_is_heading and curr != best_idx):
+        # Only expand if previous block is strictly above and within reasonable line gap (0 to 22pt)
+        if gap < 0 or gap > 22 or (curr_is_heading and curr != best_idx):
             break
         selected_indices.append(prev)
         if prev_is_heading:
@@ -119,7 +133,8 @@ def _find_paragraph_rects(page: fitz.Page, tp: Any, clause_type: str, explanatio
         next_b = curr + 1
         gap = blocks[next_b][1] - blocks[curr][3]
         next_is_heading = _is_section_heading(blocks[next_b][4])
-        if gap > 20 or next_is_heading:
+        # Only expand if next block is strictly below and within reasonable line gap (0 to 22pt)
+        if gap < 0 or gap > 22 or next_is_heading:
             break
         selected_indices.append(next_b)
         curr = next_b
