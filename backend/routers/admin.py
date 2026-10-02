@@ -1,13 +1,26 @@
 import uuid
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+import json
+import logging
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy import select, func, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+import redis.asyncio as aioredis
 
-from database import get_db
+from config import settings
+from database import get_db, AsyncSessionLocal
 from models import User, Document, AnalysisReport, RiskClause, RiskRulesConfig, DocumentStatus
 from dependencies.auth import require_admin_role
+from services.nlp_pipeline import (
+    process_document_ai_analysis,
+    match_rule_to_chunk,
+    compute_confidence_score,
+    find_category_definition,
+    extract_targeted_clause_snippet
+)
+
+logger = logging.getLogger("legalbot.admin")
 
 router = APIRouter(prefix="/admin", tags=["Admin Panel"])
 
@@ -23,6 +36,7 @@ class RiskRuleResponse(BaseModel):
     confidence_threshold: float
     weight: float
     description: Optional[str] = None
+    keywords: Optional[str] = None
     is_active: bool
 
     class Config:
@@ -35,6 +49,7 @@ class RiskRuleUpdate(BaseModel):
     confidence_threshold: Optional[float] = None
     weight: Optional[float] = None
     description: Optional[str] = None
+    keywords: Optional[str] = None
     is_active: Optional[bool] = None
 
 
@@ -44,7 +59,38 @@ class RiskRuleCreate(BaseModel):
     confidence_threshold: float = 0.75
     weight: float = 1.0
     description: Optional[str] = None
+    keywords: Optional[str] = None
     is_active: bool = True
+
+
+class AdminDocumentItem(BaseModel):
+    id: uuid.UUID
+    original_filename: str
+    file_type: str
+    file_size_bytes: int
+    status: str
+    user_id: uuid.UUID
+    user_email: str
+    overall_risk: Optional[str] = None
+    composite_risk_score: Optional[float] = None
+    total_risks_found: int = 0
+    uploaded_at: str
+
+
+class RuleMatchTestRequest(BaseModel):
+    text: str
+    custom_keywords: Optional[str] = None
+
+
+class RuleMatchItem(BaseModel):
+    category: str
+    risk_level: str
+    weight: float
+    confidence_threshold: float
+    evidence_type: str
+    confidence_score: float
+    passed_threshold: bool
+    snippet: str
 
 
 class UserSummary(BaseModel):
@@ -116,6 +162,7 @@ async def create_risk_rule(
         confidence_threshold=payload.confidence_threshold,
         weight=payload.weight,
         description=payload.description,
+        keywords=payload.keywords,
         is_active=payload.is_active
     )
     db.add(rule)
@@ -306,3 +353,158 @@ async def get_system_stats(
         total_risk_clauses=total_clauses,
         avg_processing_time_seconds=round(avg_time, 2) if avg_time else None
     )
+
+
+# ---------------------------------------------------------------------------
+# Rule Matching Simulator / Tester
+# ---------------------------------------------------------------------------
+
+@router.post("/rules/test-match", response_model=List[RuleMatchItem])
+async def test_rule_match_simulation(
+    payload: RuleMatchTestRequest,
+    admin: User = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Simulate rule matching against arbitrary contract text in real-time.
+    Allows admins to verify custom keywords, thresholds, and regex patterns
+    before applying them to actual documents.
+    """
+    rules_res = await db.execute(
+        select(RiskRulesConfig).where(RiskRulesConfig.is_active == True)
+    )
+    active_rules = rules_res.scalars().all()
+
+    matches: List[RuleMatchItem] = []
+    chunk_text = payload.text
+
+    for rule in active_rules:
+        custom_kw = payload.custom_keywords if (payload.custom_keywords and rule.category.lower() in payload.custom_keywords.lower()) else rule.keywords
+        is_match, evidence_type = match_rule_to_chunk(rule.category, chunk_text, custom_keywords=custom_kw)
+        if not is_match:
+            continue
+
+        conf = compute_confidence_score(evidence_type, llm_confirmed=False)
+        passed = conf >= rule.confidence_threshold
+
+        defn = find_category_definition(rule.category)
+        custom_kws = [k.strip().lower() for k in (custom_kw or "").split(",") if k.strip()]
+        kw_list = ((defn["multi_word"] + defn["keywords"]) if defn else [rule.category]) + custom_kws
+        pat = defn["primary_pattern"] if defn else None
+        snippet = extract_targeted_clause_snippet(chunk_text, kw_list, pat)
+
+        matches.append(RuleMatchItem(
+            category=rule.category,
+            risk_level=rule.default_risk_level,
+            weight=rule.weight,
+            confidence_threshold=rule.confidence_threshold,
+            evidence_type=evidence_type,
+            confidence_score=conf,
+            passed_threshold=passed,
+            snippet=snippet
+        ))
+
+    return matches
+
+
+# ---------------------------------------------------------------------------
+# Document Portfolio & Re-Analysis Controls
+# ---------------------------------------------------------------------------
+
+@router.get("/documents", response_model=List[AdminDocumentItem])
+async def list_all_admin_documents(
+    admin: User = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all documents across all users with their risk report status for admin control."""
+    result = await db.execute(
+        select(Document, User.email, AnalysisReport)
+        .join(User, Document.user_id == User.id)
+        .outerjoin(AnalysisReport, AnalysisReport.document_id == Document.id)
+        .order_by(Document.uploaded_at.desc())
+    )
+    rows = result.all()
+    doc_items = []
+    for doc, email, report in rows:
+        doc_items.append(AdminDocumentItem(
+            id=doc.id,
+            original_filename=doc.original_filename,
+            file_type=doc.file_type,
+            file_size_bytes=doc.file_size_bytes,
+            status=doc.status,
+            user_id=doc.user_id,
+            user_email=email,
+            overall_risk=report.overall_risk if report else None,
+            composite_risk_score=report.composite_risk_score if report else None,
+            total_risks_found=report.total_risks_found if report else 0,
+            uploaded_at=doc.uploaded_at.isoformat() if doc.uploaded_at else ""
+        ))
+    return doc_items
+
+
+@router.post("/documents/{doc_id}/reanalyze")
+async def admin_reanalyze_document(
+    doc_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    admin: User = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Re-trigger AI analysis on a document using current dynamic risk rules and weights.
+    Invalidates Redis highlight cache and queues fresh analysis.
+    """
+    doc_res = await db.execute(select(Document).where(Document.id == doc_id))
+    document = doc_res.scalar_one_or_none()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    # Invalidate Redis highlight cache
+    try:
+        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        await r.delete(f"pdf_highlights:{doc_id}")
+        await r.aclose()
+    except Exception as e:
+        logger.warning(f"Could not clear Redis highlight cache for {doc_id}: {e}")
+
+    document.status = DocumentStatus.PROCESSING
+    await db.commit()
+
+    background_tasks.add_task(process_document_ai_analysis, doc_id, AsyncSessionLocal)
+    return {
+        "status": "accepted",
+        "message": f"Re-analysis dispatched for '{document.original_filename}'.",
+        "document_id": str(doc_id)
+    }
+
+
+@router.post("/documents/reanalyze-all")
+async def admin_reanalyze_all_documents(
+    background_tasks: BackgroundTasks,
+    admin: User = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Batch re-analyze all active documents with current dynamic rules configuration.
+    """
+    docs_res = await db.execute(select(Document))
+    documents = docs_res.scalars().all()
+    count = 0
+
+    try:
+        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        for doc in documents:
+            await r.delete(f"pdf_highlights:{doc.id}")
+            doc.status = DocumentStatus.PROCESSING
+            background_tasks.add_task(process_document_ai_analysis, doc.id, AsyncSessionLocal)
+            count += 1
+        await db.commit()
+        await r.aclose()
+    except Exception as e:
+        logger.error(f"Error during reanalyze-all: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to queue re-analysis: {str(e)}")
+
+    return {
+        "status": "accepted",
+        "queued_count": count,
+        "message": f"Queued {count} documents for background re-analysis."
+    }

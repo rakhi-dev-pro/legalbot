@@ -171,4 +171,27 @@ export const fetchAdminStats = async () => {
   return response.data;
 };
 
+export const fetchAdminDocuments = async () => {
+  const response = await api.get('/admin/documents');
+  return response.data;
+};
+
+export const reanalyzeAdminDocument = async (docId) => {
+  const response = await api.post(`/admin/documents/${docId}/reanalyze`);
+  return response.data;
+};
+
+export const reanalyzeAllAdminDocuments = async () => {
+  const response = await api.post('/admin/documents/reanalyze-all');
+  return response.data;
+};
+
+export const testAdminRuleMatch = async (text, customKeywords = '') => {
+  const response = await api.post('/admin/rules/test-match', {
+    text,
+    custom_keywords: customKeywords,
+  });
+  return response.data;
+};
+
 export default api;

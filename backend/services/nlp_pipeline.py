@@ -248,7 +248,7 @@ def find_category_definition(rule_category: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def match_rule_to_chunk(rule_category: str, chunk_text: str) -> Tuple[bool, str]:
+def match_rule_to_chunk(rule_category: str, chunk_text: str, custom_keywords: Optional[str] = None) -> Tuple[bool, str]:
     """
     Check if a chunk matches a rule category.
     Returns (is_match, evidence_type) where evidence_type can be:
@@ -259,6 +259,19 @@ def match_rule_to_chunk(rule_category: str, chunk_text: str) -> Tuple[bool, str]
     defn = find_category_definition(rule_category)
     text_lower = chunk_text.lower()
     text_norm = " ".join(text_lower.split())
+
+    # Check custom keywords configured dynamically in Admin UI
+    if custom_keywords:
+        for raw_kw in custom_keywords.split(","):
+            kw = raw_kw.strip().lower()
+            if not kw:
+                continue
+            if " " in kw:
+                if kw in text_lower or kw in text_norm:
+                    return True, "exact_phrase"
+            else:
+                if re.search(rf'\b{re.escape(kw)}\w*', text_lower):
+                    return True, "contextual"
 
     if not defn:
         if rule_category.lower() in text_lower or rule_category.lower() in text_norm:
@@ -703,7 +716,8 @@ async def process_document_ai_analysis(doc_id: uuid.UUID, async_session_factory)
                 chunk_evidence = {}
 
                 for rule in active_rules:
-                    is_match, evidence_type = match_rule_to_chunk(rule.category, chunk["text"])
+                    custom_kws = getattr(rule, "keywords", None)
+                    is_match, evidence_type = match_rule_to_chunk(rule.category, chunk["text"], custom_keywords=custom_kws)
                     if is_match:
                         matched_rules.append(rule)
                         matched_rule_ids.add(rule.id)
@@ -744,8 +758,14 @@ async def process_document_ai_analysis(doc_id: uuid.UUID, async_session_factory)
                     llm_confirmed = rule.category in chunk.get("llm_matched_categories", set())
                     confidence = compute_confidence_score(evidence, llm_confirmed)
 
+                    # Dynamic Confidence Threshold: only retain clauses meeting the rule's threshold
+                    min_conf = float(getattr(rule, "confidence_threshold", 0.65) or 0.65)
+                    if confidence < min_conf:
+                        continue
+
                     defn = find_category_definition(rule.category)
-                    kw_list = (defn["multi_word"] + defn["keywords"]) if defn else [rule.category]
+                    custom_kws = [k.strip().lower() for k in (getattr(rule, "keywords", "") or "").split(",") if k.strip()]
+                    kw_list = ((defn["multi_word"] + defn["keywords"]) if defn else [rule.category]) + custom_kws
                     pat = defn["primary_pattern"] if defn else None
 
                     snippet = extract_targeted_clause_snippet(chunk["text"], kw_list, pat)

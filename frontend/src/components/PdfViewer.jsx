@@ -224,6 +224,27 @@ export default function PdfViewer({
     return clusters;
   }, [pageHighlights]);
 
+  // Smooth scroll to active highlight cluster inside PDF viewport when selected
+  useEffect(() => {
+    if (!currentActiveId || !containerRef.current || !canvasRef.current) return;
+    const activeCluster = highlightClusters.find((c) =>
+      c.highlights.some((h) => String(h.clause_id).toLowerCase() === String(currentActiveId).toLowerCase())
+    );
+    if (activeCluster && activeCluster.bbox) {
+      const timer = setTimeout(() => {
+        if (!containerRef.current || !canvasRef.current) return;
+        const canvasHeight = canvasRef.current.clientHeight || 1;
+        const targetY = (activeCluster.bbox.minY / 100) * canvasHeight;
+        const containerHeight = containerRef.current.clientHeight;
+        containerRef.current.scrollTo({
+          top: Math.max(0, targetY - containerHeight / 3),
+          behavior: 'smooth'
+        });
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [currentActiveId, highlightClusters, currentPage]);
+
   return (
     <div className="flex flex-col h-full bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl">
       
