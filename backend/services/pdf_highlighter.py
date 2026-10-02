@@ -167,20 +167,10 @@ def _get_or_create_ocr_textpage(page: fitz.Page, textpages: Dict[int, Any], page
 def _init_pages_and_ocr(doc: fitz.Document) -> Tuple[List[fitz.Page], Dict[int, Any]]:
     """
     Keep persistent fitz.Page instances alive in a list to prevent weak reference
-    deallocation errors. Pre-computes OCR textpages for scanned/sparse pages.
+    deallocation errors. Textpages are generated on-demand only when a clause requires OCR.
     """
     pages = [doc[i] for i in range(len(doc))]
     textpages: Dict[int, Any] = {}
-
-    for i, page in enumerate(pages):
-        direct_text = page.get_text().strip()
-        blocks = page.get_text("blocks")
-        # Scanned documents or signed PDFs with only sparse digital signature stamps
-        if len(direct_text) < 450 or len(blocks) <= 3:
-            _get_or_create_ocr_textpage(page, textpages, i)
-        else:
-            textpages[i] = None
-
     return pages, textpages
 
 
@@ -229,26 +219,25 @@ def extract_pdf_highlights(
         p_width = page.rect.width
         p_height = page.rect.height
 
-        # 1. Search target page with native blocks or OCR textpage
+        # 1. Search target page with native blocks or cached OCR textpage
         found_rects = _find_paragraph_rects(page, tp, clause_type, explanation, full_clause_text)
 
-        # Fallback to on-demand OCR if not found on target page
+        # Fallback to on-demand OCR if not found on target page and page is sparse/scanned
         if not found_rects and tp is None:
-            tp = _get_or_create_ocr_textpage(page, textpages, target_page - 1)
-            if tp is not None:
-                found_rects = _find_paragraph_rects(page, tp, clause_type, explanation, full_clause_text)
+            direct_text = page.get_text().strip()
+            blocks = page.get_text("blocks")
+            if len(direct_text) < 450 or len(blocks) <= 3:
+                tp = _get_or_create_ocr_textpage(page, textpages, target_page - 1)
+                if tp is not None:
+                    found_rects = _find_paragraph_rects(page, tp, clause_type, explanation, full_clause_text)
 
-        # 2. If not found on target page, search other pages
+        # 2. If not found on target page, search other pages using native blocks first
         if not found_rects:
             for other_idx, other_page in enumerate(pages):
                 if other_idx == target_page - 1:
                     continue
                 other_tp = textpages.get(other_idx)
                 hits = _find_paragraph_rects(other_page, other_tp, clause_type, explanation, full_clause_text)
-                if not hits and other_tp is None:
-                    other_tp = _get_or_create_ocr_textpage(other_page, textpages, other_idx)
-                    if other_tp is not None:
-                        hits = _find_paragraph_rects(other_page, other_tp, clause_type, explanation, full_clause_text)
                 if hits:
                     found_rects = hits
                     target_page = other_idx + 1

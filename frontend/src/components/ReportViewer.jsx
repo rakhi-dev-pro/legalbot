@@ -94,30 +94,36 @@ export default function ReportViewer({ report, onBack }) {
 
     // 2. Load PDF Blob & Highlights (PyMuPDF fitz)
     setLoadingPdf(true);
-    try {
-      const [blob, highlights] = await Promise.all([
-        fetchDocumentPdfBlob(docId).catch((e) => {
-          console.warn('PDF blob not available (may not be PDF):', e);
-          return null;
-        }),
-        fetchDocumentHighlights(docId).catch((e) => {
-          console.warn('Highlights not available:', e);
-          return [];
-        })
-      ]);
-
-      setPdfBlob(blob);
-      setPdfHighlights(highlights || []);
-
-      // If PDF blob isn't available, default to text reader
-      if (!blob) {
+    // Fetch PDF blob immediately so viewer displays right away
+    fetchDocumentPdfBlob(docId)
+      .then((blob) => {
+        setPdfBlob(blob);
+        if (!blob) setReaderType('text');
+      })
+      .catch((e) => {
+        console.warn('PDF blob not available (may not be PDF):', e);
         setReaderType('text');
+      })
+      .finally(() => setLoadingPdf(false));
+
+    // Fetch highlights in parallel with retry
+    const loadHighlights = async () => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const highlights = await fetchDocumentHighlights(docId);
+          if (highlights && Array.isArray(highlights) && highlights.length > 0) {
+            setPdfHighlights(highlights);
+            return;
+          }
+        } catch (err) {
+          console.warn(`Highlights fetch attempt ${attempt + 1} failed:`, err);
+        }
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 1200));
+        }
       }
-    } catch (err) {
-      console.error('Error fetching PDF or highlights:', err);
-    } finally {
-      setLoadingPdf(false);
-    }
+    };
+    loadHighlights();
   };
 
   if (!report) return null;
@@ -579,6 +585,11 @@ export default function ReportViewer({ report, onBack }) {
                   <Cpu className="w-4 h-4 text-sky-400" />
                   <h2 className="text-sm font-bold text-slate-100">Executive Summary</h2>
                   <SeverityChip level={report.overall_risk} />
+                  {report.composite_risk_score !== undefined && report.composite_risk_score !== null && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono border border-slate-700 font-semibold" title="Weighted Composite Risk Score">
+                      Score: {report.composite_risk_score}
+                    </span>
+                  )}
                 </div>
                 <button
                   onClick={() => setSummaryExpanded(!summaryExpanded)}

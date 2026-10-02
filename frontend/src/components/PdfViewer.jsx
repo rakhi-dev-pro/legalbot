@@ -51,8 +51,10 @@ export default function PdfViewer({
 
   // Sync activePage prop
   useEffect(() => {
-    if (activePage && activePage !== currentPage && activePage <= numPages) {
-      setCurrentPage(activePage);
+    if (activePage && Number(activePage) !== Number(currentPage)) {
+      if (numPages === 0 || Number(activePage) <= numPages) {
+        setCurrentPage(Number(activePage));
+      }
     }
   }, [activePage, numPages]);
 
@@ -152,13 +154,14 @@ export default function PdfViewer({
 
   // Filter highlights for current page and selectedClauseIds
   const pageHighlights = useMemo(() => {
-    const pageGroup = highlights.find((h) => h.page_number === currentPage);
-    if (!pageGroup) return [];
+    if (!highlights || !Array.isArray(highlights)) return [];
+    const pageGroup = highlights.find((h) => Number(h.page_number) === Number(currentPage));
+    if (!pageGroup || !Array.isArray(pageGroup.highlights)) return [];
 
     // If selectedClauseIds is passed, only show risks that are actively selected in right panel
     if (selectedClauseIds !== undefined && selectedClauseIds !== null) {
-      const selSet = new Set(selectedClauseIds);
-      return pageGroup.highlights.filter((h) => selSet.has(h.clause_id));
+      const selSet = new Set((selectedClauseIds || []).map((id) => String(id).toLowerCase()));
+      return pageGroup.highlights.filter((h) => selSet.has(String(h.clause_id).toLowerCase()));
     }
     return pageGroup.highlights;
   }, [highlights, currentPage, selectedClauseIds]);

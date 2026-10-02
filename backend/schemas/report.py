@@ -23,6 +23,7 @@ class AnalysisReportResponse(BaseModel):
     executive_summary: str
     key_entities: Dict[str, Any]
     overall_risk: str
+    composite_risk_score: Optional[float] = 0.0
     total_risks_found: int
     processing_time_seconds: Optional[float] = None
     model_used: str

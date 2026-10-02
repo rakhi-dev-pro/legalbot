@@ -121,6 +121,7 @@ class AnalysisReport(Base):
     executive_summary: Mapped[str] = mapped_column(Text, nullable=False)
     key_entities: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default='{}')
     overall_risk: Mapped[str] = mapped_column(String(10), nullable=False)
+    composite_risk_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
     total_risks_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     processing_time_seconds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     model_used: Mapped[str] = mapped_column(String(100), nullable=False, default="granite-4.1-3b-Q6_K")

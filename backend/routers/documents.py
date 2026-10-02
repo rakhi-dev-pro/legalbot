@@ -1,9 +1,12 @@
 import uuid
+import json
 from typing import List
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import redis.asyncio as aioredis
 
+from config import settings
 from database import get_db
 from models import User, Document, DocumentChunk, AnalysisReport, RiskClause
 from schemas.document import DocumentResponse, DocumentDetailResponse
@@ -216,6 +219,15 @@ async def get_document_highlights(
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
+    cache_key = f"pdf_highlights:{doc_id}"
+    try:
+        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        cached_data = await r.get(cache_key)
+        if cached_data:
+            return json.loads(cached_data)
+    except Exception:
+        pass
+
     # Get analysis report and risk clauses
     report_res = await db.execute(
         select(AnalysisReport).where(AnalysisReport.document_id == doc_id)
@@ -245,6 +257,14 @@ async def get_document_highlights(
     try:
         file_bytes = read_decrypted_file(doc.storage_path)
         page_highlights = extract_pdf_highlights(file_bytes, clauses_data)
+
+        # Store in Redis for instant subsequent retrieval
+        try:
+            r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            await r.set(cache_key, json.dumps(page_highlights), ex=86400 * 7)
+        except Exception:
+            pass
+
         return page_highlights
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to generate highlights: {e}")

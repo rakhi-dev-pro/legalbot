@@ -198,6 +198,15 @@ async def init_db():
                 WHEN duplicate_column THEN NULL;
             END $$;
         """))
+
+        # Add composite_risk_score column to analysis_reports if it doesn't exist
+        await conn.execute(text("""
+            DO $$ BEGIN
+                ALTER TABLE analysis_reports ADD COLUMN composite_risk_score FLOAT DEFAULT 0.0;
+            EXCEPTION
+                WHEN duplicate_column THEN NULL;
+            END $$;
+        """))
     
     # 4. Seed missing risk rules into database
     async with AsyncSessionLocal() as session:
