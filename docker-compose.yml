@@ -57,11 +57,39 @@ services:
       - "${LLAMA_CPP_PORT:-8080}:8080"
     volumes:
       - ./models:/models
-    command: >
-      --model /models/${LLM_MODEL_FILE:-granite-4.1-3b-Q6_K.gguf}
-      --host 0.0.0.0
-      --port 8080
-      -c ${LLM_CTX_SIZE:-4096}
+    environment:
+      - LLM_MODEL_FILE=${LLM_MODEL_FILE:-granite-4.2-3b-Q4_K_M.gguf}
+      - LLM_CTX_SIZE=${LLM_CTX_SIZE:-4096}
+      - HF_DOWNLOAD_URL=${HF_DOWNLOAD_URL:-https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/main/granite-4.2-3b-Q4_K_M.gguf}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        TARGET_FILE="/models/$${LLM_MODEL_FILE}"
+        if [ ! -f "$$TARGET_FILE" ]; then
+          EXISTING=$$(ls /models/*.gguf 2>/dev/null | head -n 1)
+          if [ -n "$$EXISTING" ] && [ -f "$$EXISTING" ]; then
+            echo "[LegalBot LLM] Target $$TARGET_FILE not found, using existing model: $$EXISTING"
+            TARGET_FILE="$$EXISTING"
+          else
+            echo "[LegalBot LLM] No GGUF model found in /models directory."
+            echo "[LegalBot LLM] Downloading $${LLM_MODEL_FILE} (~2.09 GB) from Hugging Face..."
+            echo "[LegalBot LLM] Source: $${HF_DOWNLOAD_URL}"
+            curl -L -f --progress-bar -o "$${TARGET_FILE}.download" "$${HF_DOWNLOAD_URL}"
+            if [ $$? -eq 0 ] && [ -s "$${TARGET_FILE}.download" ]; then
+              mv "$${TARGET_FILE}.download" "$$TARGET_FILE"
+              echo "[LegalBot LLM] Download complete: $$TARGET_FILE"
+            else
+              echo "[LegalBot LLM] ERROR: Download failed."
+              rm -f "$${TARGET_FILE}.download"
+              exit 1
+            fi
+          fi
+        else
+          echo "[LegalBot LLM] Found configured model file: $$TARGET_FILE"
+        fi
+        echo "[LegalBot LLM] Starting llama-server on port 8080 with model: $$TARGET_FILE"
+        exec /app/llama-server --model "$$TARGET_FILE" --host 0.0.0.0 --port 8080 -c "$${LLM_CTX_SIZE}"
     # Uncomment below if running on host with NVIDIA GPU acceleration:
     # deploy:
     #   resources:
@@ -86,7 +114,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-legal_admin}:${POSTGRES_PASSWORD:-legalbot_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-legalbot}
       - REDIS_URL=redis://redis:6379/0
       - LLAMA_CPP_URL=http://llm-service:8080
-      - LLM_MODEL_FILE=${LLM_MODEL_FILE:-granite-4.1-3b-Q6_K.gguf}
+      - LLM_MODEL_FILE=${LLM_MODEL_FILE:-granite-4.2-3b-Q4_K_M.gguf}
       - SECRET_KEY=${SECRET_KEY:-super_secret_legalbot_jwt_key}
     depends_on:
       postgres:
