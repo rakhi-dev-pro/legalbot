@@ -93,10 +93,9 @@ docker compose up -d --build
 
 ### Step 4: Accessing the Application
 
-1. Open your web browser and navigate to:
-   $$\text{\textbf{https://localhost}}$$
+1. Open your web browser and navigate to: **https://localhost**
 2. **Self-Signed SSL Certificate Notice**: Because Nginx generates a self-signed TLS certificate for local HTTPS, your browser will display a security warning (*"Your connection is not private"*).
-   - Click **Advanced** $\rightarrow$ **Proceed to localhost (unsafe)**.
+   - Click **Advanced** → **Proceed to localhost (unsafe)**.
 3. **Default Admin Login**:
    - **Email**: `admin@legalbot.com`
    - **Password**: `password123`

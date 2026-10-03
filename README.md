@@ -55,7 +55,7 @@ Upload agreements (`.pdf`, `.docx` up to 50 MB) via an intuitive drag-and-drop m
 </p>
 
 #### Step 2: Real-Time Local AI Processing
-A progress indicator monitors the multi-stage local pipeline (PyMuPDF / docx extraction $\rightarrow$ spaCy NER entity detection $\rightarrow$ deterministic rule matching $\rightarrow$ IBM Granite 3B LLM parallel inference).
+A progress indicator monitors the multi-stage local pipeline (PyMuPDF / docx extraction → spaCy NER entity detection → deterministic rule matching → IBM Granite 3B LLM parallel inference).
 
 <p align="center">
   <img src="images/wait.png" alt="Processing State" width="850" />
@@ -178,7 +178,7 @@ docker compose up -d --build
 Navigate to **[https://localhost](https://localhost)** in your web browser.
 
 > [!NOTE]
-> Because Nginx generates a local self-signed TLS certificate, click **Advanced** $\rightarrow$ **Proceed to localhost (unsafe)** when prompted by your browser.
+> Because Nginx generates a local self-signed TLS certificate, click **Advanced** → **Proceed to localhost (unsafe)** when prompted by your browser.
 
 ---
 

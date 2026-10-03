@@ -151,7 +151,7 @@ Admin users (`role: "admin"`) will see an **Admin** button in the top navigation
 
 ### 4. 👥 User Management
 - View all registered users.
-- Promote or demote user roles (**User** $\leftrightarrow$ **Admin**).
+- Promote or demote user roles (**User** ↔ **Admin**).
 - Toggle account active/disabled status.
 
 <p align="center">
