@@ -129,7 +129,7 @@ class AnalysisReport(Base):
     composite_risk_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0.0)
     total_risks_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     processing_time_seconds: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    model_used: Mapped[str] = mapped_column(String(100), nullable=False, default="granite-4.2-3b-Q4_K_M")
+    model_used: Mapped[str] = mapped_column(String(100), nullable=False, default="granite-4.1-3b-Q6_K")
     completed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
