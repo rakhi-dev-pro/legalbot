@@ -67,23 +67,17 @@ services:
       - |
         TARGET_FILE="/models/$${LLM_MODEL_FILE}"
         if [ ! -f "$$TARGET_FILE" ]; then
-          EXISTING=$$(ls /models/*.gguf 2>/dev/null | head -n 1)
-          if [ -n "$$EXISTING" ] && [ -f "$$EXISTING" ]; then
-            echo "[LegalBot LLM] Target $$TARGET_FILE not found, using existing model: $$EXISTING"
-            TARGET_FILE="$$EXISTING"
+          echo "[LegalBot LLM] Configured model $$TARGET_FILE not found in /models."
+          echo "[LegalBot LLM] Downloading $${LLM_MODEL_FILE} (~2.09 GB) from Hugging Face..."
+          echo "[LegalBot LLM] Source: $${HF_DOWNLOAD_URL}"
+          curl -L -f --progress-bar -o "$${TARGET_FILE}.download" "$${HF_DOWNLOAD_URL}"
+          if [ $$? -eq 0 ] && [ -s "$${TARGET_FILE}.download" ]; then
+            mv "$${TARGET_FILE}.download" "$$TARGET_FILE"
+            echo "[LegalBot LLM] Download complete: $$TARGET_FILE"
           else
-            echo "[LegalBot LLM] No GGUF model found in /models directory."
-            echo "[LegalBot LLM] Downloading $${LLM_MODEL_FILE} (~2.09 GB) from Hugging Face..."
-            echo "[LegalBot LLM] Source: $${HF_DOWNLOAD_URL}"
-            curl -L -f --progress-bar -o "$${TARGET_FILE}.download" "$${HF_DOWNLOAD_URL}"
-            if [ $$? -eq 0 ] && [ -s "$${TARGET_FILE}.download" ]; then
-              mv "$${TARGET_FILE}.download" "$$TARGET_FILE"
-              echo "[LegalBot LLM] Download complete: $$TARGET_FILE"
-            else
-              echo "[LegalBot LLM] ERROR: Download failed."
-              rm -f "$${TARGET_FILE}.download"
-              exit 1
-            fi
+            echo "[LegalBot LLM] ERROR: Download failed."
+            rm -f "$${TARGET_FILE}.download"
+            exit 1
           fi
         else
           echo "[LegalBot LLM] Found configured model file: $$TARGET_FILE"
