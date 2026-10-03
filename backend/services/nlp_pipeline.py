@@ -100,11 +100,18 @@ CATEGORY_RULE_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "late rent": {
         "multi_word": [
             "late fee", "interest on default", "default interest", "late payment fee",
-            "overdue rent", "penalty of rs", "default penalty", "delayed payment"
+            "overdue rent", "penalty of rs", "default penalty", "delayed payment",
+            "late rent payment", "default in payment of rent"
         ],
-        "primary_pattern": re.compile(r'\b(late|default\w*|overdue|penalt\w*)\b', re.IGNORECASE),
-        "context_terms": ["rent", "fee", "interest", "payment", "due", "charges", "default", "penalty"],
-        "keywords": ["late fee", "interest on default", "default penalty", "late rent", "penalty"]
+        "primary_pattern": re.compile(
+            r'\b(late\s+(?:fee|rent|payment|charges?)|overdue\s+(?:rent|payment|amount)|'
+            r'default\s+(?:interest|penalty|fee|charges?)|interest\s+on\s+default|delayed\s+payment|'
+            r'penalty\s+(?:for|on)\s+(?:late|delayed|overdue|non-payment)|'
+            r'default\s+in\s+payment)\b',
+            re.IGNORECASE
+        ),
+        "context_terms": ["rent", "due", "payment", "interest", "charges", "penalty", "per day", "per month", "overdue"],
+        "keywords": ["late fee", "interest on default", "default penalty", "late rent", "penalty", "overdue rent"]
     },
     "deposit": {
         "multi_word": [
@@ -175,11 +182,16 @@ CATEGORY_RULE_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "rent escalation": {
         "multi_word": [
             "rent escalation", "rent increment", "annual increment",
-            "increase in rent", "escalation of rent", "escalation clause"
+            "increase in rent", "escalation of rent", "escalation clause",
+            "rent shall increase", "shall increase by", "annual increase", "rent revision"
         ],
-        "primary_pattern": re.compile(r'\b(rent\w*|lease\w*)\b', re.IGNORECASE),
-        "context_terms": ["escalat", "increment", "increase", "annual", "percentage", "rate", "year"],
-        "keywords": ["rent escalation", "rent increment", "increase in rent", "escalat"]
+        "primary_pattern": re.compile(
+            r'\b(rent\s+escalat\w*|rent\s+increment|increase\s+in\s+rent|rent\s+shall\s+increase|'
+            r'shall\s+increase\s+by|\d+%\s+increase|annual\s+increment|escalat\w*)\b',
+            re.IGNORECASE
+        ),
+        "context_terms": ["rent", "escalat", "increment", "increase", "annual", "percentage", "rate", "year"],
+        "keywords": ["rent escalation", "rent increment", "increase in rent", "escalat", "rent shall increase"]
     },
     "subleas": {
         "multi_word": [
@@ -202,20 +214,30 @@ CATEGORY_RULE_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "landlord entry": {
         "multi_word": [
             "right of entry", "inspect the premises", "enter upon the premises",
-            "inspection of premises", "access at reasonable times", "entry by landlord"
+            "inspection of premises", "access at reasonable times", "entry by landlord",
+            "landlord shall have the right to enter", "inspection by landlord"
         ],
-        "primary_pattern": re.compile(r'\b(inspect\w*|entry|access)\b', re.IGNORECASE),
-        "context_terms": ["landlord", "first party", "premises", "property", "reasonable hours", "inspection"],
-        "keywords": ["landlord entry", "inspect", "entry", "access to premises"]
+        "primary_pattern": re.compile(
+            r'\b(landlord\s+entry|right\s+of\s+entry|entry\s+by\s+(?:the\s+)?landlord|'
+            r'inspect(?:ion)?\s+(?:of\s+)?(?:the\s+)?premises|enter\s+(?:upon\s+)?(?:the\s+)?premises|'
+            r'access\s+(?:at\s+reasonable|for\s+(?:the\s+purpose\s+of\s+)?inspection))\b',
+            re.IGNORECASE
+        ),
+        "context_terms": ["landlord", "lessor", "first party", "owner", "inspection", "reasonable notice", "reasonable hours"],
+        "keywords": ["landlord entry", "inspect the premises", "right of entry", "entry by landlord"]
     },
     "utilit": {
         "multi_word": [
             "electricity charges", "water charges", "maintenance charges",
-            "utility charges", "utility bills", "common area maintenance"
+            "utility charges", "utility bills", "common area maintenance",
+            "utility expenses", "gas charges", "power charges", "maintenance fee"
         ],
-        "primary_pattern": re.compile(r'\b(utilit(?:y|ies)|electricity|water\s+charges?|maintenance\s+fee)\b', re.IGNORECASE),
-        "context_terms": ["tenant", "second party", "occupant", "bill", "meter", "payment"],
-        "keywords": ["utility", "utilities", "electricity", "water charges", "maintenance fee"]
+        "primary_pattern": re.compile(
+            r'\b(utilit(?:y|ies)|electricity|water\s+charges?|maintenance\s+fees?|gas\s+charges?|power\s+bills?|utility\s+bills?)\b',
+            re.IGNORECASE
+        ),
+        "context_terms": ["tenant", "second party", "occupant", "bill", "meter", "payment", "charges", "pay"],
+        "keywords": ["utility", "utilities", "electricity", "water charges", "maintenance fee", "utility bills"]
     },
     "probation": {
         "multi_word": [
@@ -238,13 +260,87 @@ CATEGORY_RULE_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# Canonical category mapping preventing dictionary-order substring misclassifications
+# (e.g. 'Rent Escalation & Auto-Increase' must map to 'rent escalation', NOT 'auto')
+CATEGORY_CANONICAL_MAP: Dict[str, str] = {
+    # Real estate & tenant
+    "rent escalation & auto-increase": "rent escalation",
+    "rent escalation": "rent escalation",
+    "utilities & maintenance fee liabilities": "utilit",
+    "utilities & maintenance fee": "utilit",
+    "utilities": "utilit",
+    "utility": "utilit",
+    "maintenance & repair obligations": "maintenance",
+    "maintenance & repair": "maintenance",
+    "maintenance": "maintenance",
+    "landlord entry & inspection rights": "landlord entry",
+    "landlord entry": "landlord entry",
+    "security deposit forfeiture & deductions": "deposit",
+    "deposit forfeiture": "deposit",
+    "deposit": "deposit",
+    "late rent payment & default penalty": "late rent",
+    "late rent": "late rent",
+    "eviction & notice to vacate": "eviction",
+    "eviction": "eviction",
+    "subleasing & assignment restriction": "subleas",
+    "subleasing": "subleas",
+    "sublease": "subleas",
+    # Commercial & employment
+    "automatic renewal": "auto",
+    "auto-renewal": "auto",
+    "auto renewal": "auto",
+    "indemnity & hold harmless": "indemnity",
+    "indemnity": "indemnity",
+    "unilateral termination": "termination",
+    "termination": "termination",
+    "limitation of liability": "liability",
+    "liability": "liability",
+    "non-compete & non-solicitation": "non-compete",
+    "non-compete": "non-compete",
+    "governing law & jurisdiction": "governing law",
+    "governing law": "governing law",
+    "confidentiality & non-disclosure": "confidentiality",
+    "confidentiality": "confidentiality",
+    "arbitration & dispute resolution": "arbitration",
+    "arbitration": "arbitration",
+    "force majeure": "force majeure",
+    "probation & confirmation terms": "probation",
+    "probation": "probation",
+    "ip assignment & work for hire": "intellectual property",
+    "intellectual property": "intellectual property",
+}
+
 
 def find_category_definition(rule_category: str) -> Optional[Dict[str, Any]]:
-    """Resolve category definition dict by fuzzy category key matching."""
-    cat_lower = (rule_category or "").lower()
-    for key, defn in CATEGORY_RULE_DEFINITIONS.items():
+    """
+    Resolve category definition dict safely:
+    1. Exact / canonical map lookup first (prevents substring collision like 'auto' in 'Rent Escalation & Auto-Increase').
+    2. Longest-key match with word boundary checking to avoid short substring collisions.
+    """
+    if not rule_category:
+        return None
+    cat_lower = rule_category.strip().lower()
+
+    # 1. Canonical exact match
+    if cat_lower in CATEGORY_CANONICAL_MAP:
+        key = CATEGORY_CANONICAL_MAP[cat_lower]
+        return CATEGORY_RULE_DEFINITIONS.get(key)
+
+    # 2. Match longest matching keys first to avoid short prefix/substring collisions
+    # e.g., 'rent escalation' must match before 'auto'
+    sorted_keys = sorted(CATEGORY_RULE_DEFINITIONS.keys(), key=lambda k: len(k), reverse=True)
+    for key in sorted_keys:
+        pattern = rf'\b{re.escape(key)}\b'
+        if re.search(pattern, cat_lower):
+            return CATEGORY_RULE_DEFINITIONS[key]
+
+    # 3. Fallback: normalized substring match with safety guard against 'auto' colliding with 'auto-increase'
+    for key in sorted_keys:
+        if key == "auto" and "auto-increase" in cat_lower:
+            continue
         if key in cat_lower:
-            return defn
+            return CATEGORY_RULE_DEFINITIONS[key]
+
     return None
 
 
@@ -284,9 +380,17 @@ def match_rule_to_chunk(rule_category: str, chunk_text: str, custom_keywords: Op
             return True, "exact_phrase"
 
     # 2. Primary pattern check + context terms
-    if defn["primary_pattern"].search(chunk_text):
+    m = defn["primary_pattern"].search(chunk_text)
+    if m:
+        matched_span = m.span()
+        matched_str = chunk_text[matched_span[0]:matched_span[1]].lower()
         for ctx in defn["context_terms"]:
             if ctx in text_lower or ctx in text_norm:
+                # Disallow trivial self-matching where the same word triggers both pattern and context
+                if ctx == matched_str:
+                    rest = text_lower[:matched_span[0]] + " " + text_lower[matched_span[1]:]
+                    if ctx not in rest:
+                        continue
                 return True, "contextual"
 
     return False, "none"
@@ -294,16 +398,19 @@ def match_rule_to_chunk(rule_category: str, chunk_text: str, custom_keywords: Op
 
 def compute_confidence_score(evidence_type: str, llm_confirmed: bool) -> float:
     """
-    Dynamically calculate confidence based on detection evidence:
+    Dynamically calculate evidence strength based on detection evidence:
     - 0.95: Both deterministic regex rules AND LLM zero-shot classifier independently flag the clause.
     - 0.88: Exact multi-word keyword phrase match (e.g. 'automatic renewal', 'hold harmless and indemnify').
+    - 0.82: High-confidence LLM zero-shot classification (preserves High-risk rules with 0.75 threshold).
     - 0.78: Single keyword match in combination with related contextual terms.
-    - 0.72: Fallback classification score.
+    - 0.72: Fallback heuristic score.
     """
     if llm_confirmed and evidence_type in ("exact_phrase", "contextual"):
         return 0.95
     if evidence_type == "exact_phrase":
         return 0.88
+    if evidence_type == "llm_only":
+        return 0.82
     if evidence_type == "contextual":
         return 0.78
     return 0.72
@@ -633,6 +740,56 @@ async def generate_batched_clause_recommendations(detected_clauses: list) -> dic
     return {c["category"]: get_default_recommendation(c["category"]) for c in detected_clauses}
 
 
+# ---------------------------------------------------------------------------
+# Risk Scoring & Policy Decider
+# ---------------------------------------------------------------------------
+
+SEVERITY_MULTIPLIERS: Dict[str, float] = {
+    "HIGH": 3.0,
+    "MEDIUM": 2.0,
+    "LOW": 1.0
+}
+
+
+def compute_overall_risk(detected_clauses: List[Dict[str, Any]]) -> Tuple[str, float]:
+    """
+    Calculate composite risk score and determine overall document risk level.
+
+    Composite Score = sum(Rule Weight_i * Severity Multiplier_i)
+    High Multiplier = 3.0, Medium = 2.0, Low = 1.0
+
+    Safety Policy (Legal Risk Floor):
+    - Any verified High-risk clause (e.g. unilateral indemnity, immediate eviction, unlimited liability)
+      mandates a minimum overall risk of "High". In legal risk review, under-warning on severe liability
+      is costly and contrary to legal prudence.
+    - Otherwise, threshold bands apply:
+      Score >= 8.0 -> High Risk
+      3.5 <= Score < 8.0 -> Medium Risk
+      Score < 3.5 -> Low Risk
+    """
+    composite_score = 0.0
+    has_high_clause = False
+
+    for c in detected_clauses:
+        r_weight = float(c.get("rule_weight", 1.0))
+        r_severity = str(c.get("risk_level", "Medium")).upper()
+        multiplier = SEVERITY_MULTIPLIERS.get(r_severity, 2.0)
+        composite_score += (r_weight * multiplier)
+        if r_severity == "HIGH":
+            has_high_clause = True
+
+    composite_risk_score = round(composite_score, 2)
+
+    if has_high_clause or composite_risk_score >= 8.0:
+        overall_risk = "High"
+    elif composite_risk_score >= 3.5:
+        overall_risk = "Medium"
+    else:
+        overall_risk = "Low"
+
+    return overall_risk, composite_risk_score
+
+
 async def process_document_ai_analysis(doc_id: uuid.UUID, async_session_factory):
     """
     Asynchronous NLP Analysis Engine for LegalBot:
@@ -729,17 +886,24 @@ async def process_document_ai_analysis(doc_id: uuid.UUID, async_session_factory)
                 chunk["llm_matched_categories"] = set()
 
             # Zero-shot LLM verification & fallback:
-            # Select up to 2 chunks with rule matches + up to 1 ambiguous chunk without matches
+            # Check all chunks with rule matches (up to 12) + up to 3 substantive unmatched chunks
             candidate_llm_chunks = []
             chunks_with_matches = [c for c in chunks_data if c["matched_rules"]]
-            candidate_llm_chunks.extend(chunks_with_matches[:2])
+            candidate_llm_chunks.extend(chunks_with_matches[:12])
             chunks_without_matches = [c for c in chunks_data if not c["matched_rules"] and c.get("token_count", 0) >= 30]
-            if len(candidate_llm_chunks) < 3 and chunks_without_matches:
-                candidate_llm_chunks.append(chunks_without_matches[0])
+            if chunks_without_matches:
+                candidate_llm_chunks.extend(chunks_without_matches[:3])
 
             if candidate_llm_chunks:
+                # Use a concurrency semaphore to rate-limit llama.cpp requests and prevent overwhelming the model
+                llm_sem = asyncio.Semaphore(2)
+
+                async def _throttled_classify(chunk_txt, rules):
+                    async with llm_sem:
+                        return await classify_chunk_with_llm(chunk_txt, rules)
+
                 llm_tasks = [
-                    classify_chunk_with_llm(c["text"], active_rules) for c in candidate_llm_chunks
+                    _throttled_classify(c["text"], active_rules) for c in candidate_llm_chunks
                 ]
                 classification_results = await asyncio.gather(*llm_tasks, return_exceptions=True)
                 for c, llm_result in zip(candidate_llm_chunks, classification_results):
@@ -796,34 +960,8 @@ async def process_document_ai_analysis(doc_id: uuid.UUID, async_session_factory)
                             break
                 c["recommendation"] = rec or get_default_recommendation(cat)
 
-            # Weighted Overall Risk Scoring:
-            # Composite Score = sum(Rule Weight_i * Severity Multiplier_i)
-            # High Severity Multiplier = 3.0, Medium = 2.0, Low = 1.0
-            SEVERITY_MULTIPLIERS = {
-                "HIGH": 3.0,
-                "MEDIUM": 2.0,
-                "LOW": 1.0
-            }
-
-            composite_score = 0.0
-            for c in detected_clauses:
-                r_weight = float(c.get("rule_weight", 1.0))
-                r_severity = str(c.get("risk_level", "Medium")).upper()
-                multiplier = SEVERITY_MULTIPLIERS.get(r_severity, 2.0)
-                composite_score += (r_weight * multiplier)
-
-            composite_risk_score = round(composite_score, 2)
-
-            # Classify overall risk by threshold bands:
-            # Score >= 8.0 -> High Risk
-            # 3.5 <= Score < 8.0 -> Medium Risk
-            # Score < 3.5 -> Low Risk
-            if composite_risk_score >= 8.0:
-                overall_risk = "High"
-            elif composite_risk_score >= 3.5:
-                overall_risk = "Medium"
-            else:
-                overall_risk = "Low"
+            # Weighted Overall Risk Scoring (Safety-floor calibrated)
+            overall_risk, composite_risk_score = compute_overall_risk(detected_clauses)
 
             # 7. Persist
             duration = round(time.time() - start_time, 2)

@@ -11,7 +11,8 @@ from services.nlp_pipeline import (
     deduplicate_clauses,
     compute_confidence_score,
     find_category_definition,
-    match_rule_to_chunk
+    match_rule_to_chunk,
+    compute_overall_risk
 )
 from database import init_db, engine
 
@@ -67,42 +68,83 @@ def test_genuine_confidence_scoring():
     assert compute_confidence_score("exact_phrase", llm_confirmed=True) == 0.95
     assert compute_confidence_score("contextual", llm_confirmed=True) == 0.95
     assert compute_confidence_score("exact_phrase", llm_confirmed=False) == 0.88
+    assert compute_confidence_score("llm_only", llm_confirmed=False) == 0.82
+    assert compute_confidence_score("llm_only", llm_confirmed=False) >= 0.75  # Must clear High-risk 0.75 threshold
     assert compute_confidence_score("contextual", llm_confirmed=False) == 0.78
     assert compute_confidence_score("fallback", llm_confirmed=False) == 0.72
 
 
 def test_weighted_overall_risk_scoring():
-    SEVERITY_MULTIPLIERS = {
-        "HIGH": 3.0,
-        "MEDIUM": 2.0,
-        "LOW": 1.0
-    }
+    # Case 1: Lone High-risk clause (Indemnity: weight 2.0 * 3.0 = 6.0).
+    # Safety policy requires lone High-risk clause to rate 'High' (not 'Medium').
+    clauses_lone_high = [
+        {"risk_level": "High", "rule_weight": 2.0}
+    ]
+    overall_lone, score_lone = compute_overall_risk(clauses_lone_high)
+    assert score_lone == 6.0
+    assert overall_lone == "High", f"Lone High risk clause must rate High, got {overall_lone}"
 
-    # Case 1: High risk (Indemnity + Late Rent -> 2.0*3 + 1.8*3 = 11.4 >= 8.0)
+    # Case 2: Multiple High risk clauses (Indemnity + Late Rent -> 2.0*3 + 1.8*3 = 11.4 >= 8.0)
     clauses_high = [
         {"risk_level": "High", "rule_weight": 2.0},
         {"risk_level": "High", "rule_weight": 1.8},
     ]
-    score_high = sum(float(c["rule_weight"]) * SEVERITY_MULTIPLIERS[c["risk_level"].upper()] for c in clauses_high)
+    overall_high, score_high = compute_overall_risk(clauses_high)
     assert score_high == 11.4
-    assert score_high >= 8.0
+    assert overall_high == "High"
 
-    # Case 2: Medium risk (Non-Compete + Confidentiality -> 1.4*2 + 1.0*2 = 4.8)
+    # Case 3: Medium risk (Non-Compete + Confidentiality -> 1.4*2 + 1.0*2 = 4.8)
     clauses_med = [
         {"risk_level": "Medium", "rule_weight": 1.4},
         {"risk_level": "Medium", "rule_weight": 1.0},
     ]
-    score_med = sum(float(c["rule_weight"]) * SEVERITY_MULTIPLIERS[c["risk_level"].upper()] for c in clauses_med)
+    overall_med, score_med = compute_overall_risk(clauses_med)
     assert score_med == 4.8
-    assert 3.5 <= score_med < 8.0
+    assert overall_med == "Medium"
 
-    # Case 3: Low risk (Arbitration -> 0.8*1.0 = 0.8 < 3.5)
+    # Case 4: Low risk (Arbitration -> 0.8*1.0 = 0.8 < 3.5)
     clauses_low = [
         {"risk_level": "Low", "rule_weight": 0.8}
     ]
-    score_low = sum(float(c["rule_weight"]) * SEVERITY_MULTIPLIERS[c["risk_level"].upper()] for c in clauses_low)
+    overall_low, score_low = compute_overall_risk(clauses_low)
     assert score_low == 0.8
-    assert score_low < 3.5
+    assert overall_low == "Low"
+
+
+def test_category_definition_resolution():
+    # 1. 'Rent Escalation & Auto-Increase' must resolve to rent escalation, NOT auto-renewal
+    defn_esc = find_category_definition("Rent Escalation & Auto-Increase")
+    assert defn_esc is not None
+    assert "rent escalation" in defn_esc["multi_word"]
+    assert "automatic renewal" not in defn_esc["multi_word"]
+
+    # 2. 'Utilities & Maintenance Fee Liabilities' must resolve to utilit, NOT maintenance
+    defn_util = find_category_definition("Utilities & Maintenance Fee Liabilities")
+    assert defn_util is not None
+    assert "utility bills" in defn_util["multi_word"]
+    assert "structural repairs" not in defn_util["multi_word"]
+
+    # 3. Real escalation clause matches 'Rent Escalation & Auto-Increase'
+    clause_esc = "The annual rent shall increase by 10% every year on the anniversary of the commencement date."
+    matched_esc, ev_esc = match_rule_to_chunk("Rent Escalation & Auto-Increase", clause_esc)
+    assert matched_esc is True, "Expected real escalation clause to match Rent Escalation & Auto-Increase"
+
+    # 4. Real utility clause matches 'Utilities & Maintenance Fee Liabilities'
+    clause_util = "The Tenant shall be responsible for paying all electricity charges, water charges, and utility bills."
+    matched_util, ev_util = match_rule_to_chunk("Utilities & Maintenance Fee Liabilities", clause_util)
+    assert matched_util is True, "Expected real utility clause to match Utilities & Maintenance Fee Liabilities"
+
+
+def test_benign_text_probes_no_false_positives():
+    # Benign probe 1: 'default setting' should NOT trigger Late Rent Payment rule
+    benign_tech = "The default setting shall apply to this system configuration unless explicitly changed by an administrator."
+    matched_late, _ = match_rule_to_chunk("Late Rent Payment & Default Penalty", benign_tech)
+    assert matched_late is False, "Benign phrase 'default setting' must not trigger Late Rent rule"
+
+    # Benign probe 2: 'access to the office premises' should NOT trigger Landlord Entry rule
+    benign_office = "All employees shall have access to the office premises during normal business hours."
+    matched_entry, _ = match_rule_to_chunk("Landlord Entry & Inspection Rights", benign_office)
+    assert matched_entry is False, "Benign phrase 'access to the office premises' must not trigger Landlord Entry rule"
 
 
 async def test_database_migration_composite_risk_score():
@@ -143,11 +185,15 @@ if __name__ == '__main__':
     test_genuine_confidence_scoring()
     print("Running test_weighted_overall_risk_scoring...")
     test_weighted_overall_risk_scoring()
+    print("Running test_category_definition_resolution...")
+    test_category_definition_resolution()
+    print("Running test_benign_text_probes_no_false_positives...")
+    test_benign_text_probes_no_false_positives()
     print("Running test_unilateral_termination_matching...")
     test_unilateral_termination_matching()
     print("Running test_database_migration_composite_risk_score...")
     asyncio.run(test_database_migration_composite_risk_score())
     print("\n==========================================")
-    print("ALL PHASE 2 TESTS PASSED SUCCESSFULLY!")
+    print("ALL PHASE 2 & PHASE 3 TESTS PASSED SUCCESSFULLY!")
     print("==========================================")
 
