@@ -27,6 +27,22 @@ To create a standard user account, click **Register Here** on the login modal.
 3. Click **Upload & Analyze Contract**.
 4. The system will encrypt the file at rest using AES-256-GCM, parse the text, run entity recognition, scan risk rules, and execute parallel LLM recommendations via IBM Granite.
 
+<p align="center">
+  <img src="../images/upload.png" alt="Upload Contract Modal" width="800" />
+</p>
+
+<p align="center">
+  <img src="../images/wait.png" alt="Processing State" width="800" />
+</p>
+
+<p align="center">
+  <img src="../images/uploaded.png" alt="Upload Confirmation" width="800" />
+</p>
+
+<p align="center">
+  <img src="../images/view_documents.png" alt="Document Repository" width="800" />
+</p>
+
 ---
 
 ## 📊 3. Interactive Report Viewer
@@ -39,6 +55,14 @@ Once analysis completes, the **Contract Analysis Viewer** opens.
 Use the mode switcher in the top right header:
 - **Side-by-Side Reader**: Displays the original document text on the left panel and AI risk analysis on the right panel.
 - **Summary Report Only**: Maximize the right panel for high-level executive summaries and print/exporting.
+
+<p align="center">
+  <img src="../images/right%20panel.png" alt="Executive Summary Panel" width="800" />
+</p>
+
+<p align="center">
+  <img src="../images/view%20risks.png" alt="Detected Risk Clauses" width="800" />
+</p>
 
 #### B. Page-Wise Navigation Sidebar
 - The left document reader includes a **vertical Page Navigation Sidebar** (`Pg 1`, `Pg 2`, ...).
@@ -60,6 +84,10 @@ Use the mode switcher in the top right header:
 - If a single document section contains **multiple risks**, all applicable risk badges are displayed together on that section header.
 - Click **Clear highlights** at the top of the reader to reset all selections.
 
+<p align="center">
+  <img src="../images/annotated%20doc.png" alt="Side-by-Side Reader with Risk Highlighting" width="800" />
+</p>
+
 #### E. Per-Clause Actionable Recommendations & Evidence Strength
 - Every detected risk clause features an AI-generated **Recommended Action** card providing practical negotiation and protective amendment advice.
 - **Evidence Strength Score**: Represents calibrated detection certainty:
@@ -68,6 +96,10 @@ Use the mode switcher in the top right header:
   - `82%`: High-confidence zero-shot LLM classification (satisfies the 0.75 threshold for High-risk rules).
   - `78%`: Single keyword match with supporting legal context terms.
   - `72%`: Fallback classification score.
+
+<p align="center">
+  <img src="../images/detailed%20selected%20risk%20and%20its%20clause.png" alt="Clause Detail and AI Action Recommendation" width="800" />
+</p>
 
 #### F. Force Re-Analyze Option
 - If a document analysis was interrupted or dynamic rules were reconfigured, click the **Force Re-analyze** button in the viewer toolbar or dashboard to rerun the complete 7-stage NLP pipeline with `?force=true`.
@@ -83,6 +115,10 @@ Admin users (`role: "admin"`) will see an **Admin** button in the top navigation
 - **Risk Severity Distribution**: Breakdown of High, Medium, and Low risk findings.
 - **Processing Status Breakdown**: Completed vs Failed pipeline jobs.
 
+<p align="center">
+  <img src="../images/admin%20dashboard.png" alt="Admin Analytics Dashboard" width="800" />
+</p>
+
 ### 2. ⚙️ Risk Rules Config (Live CRUD Editor)
 - View and modify active risk classification rules.
 - Add new custom risk categories (e.g. *Intellectual Property Assignment*, *Data Privacy / GDPR*).
@@ -96,15 +132,31 @@ Admin users (`role: "admin"`) will see an **Admin** button in the top navigation
 - Test rules against custom sample clauses using the **Interactive Chunk Match Tester**.
 - Reset all rules back to system default 19 rules via **Reset to Defaults**.
 
+<p align="center">
+  <img src="../images/add%20custom%20rule.png" alt="Add Custom Rule" width="800" />
+</p>
+
+<p align="center">
+  <img src="../images/edit%20rule%20and%20simulate%20rule.png" alt="Edit Rule and Simulate Match" width="800" />
+</p>
+
 ### 3. 📄 Document Management & Sequential Batch Re-Analysis
 - Inspect all uploaded documents across all system users.
 - Trigger single document re-analysis with currently configured rules.
 - **Re-analyze All Documents**: Dispatches a sequential background worker queue to re-analyze all documents without overloading the local LLM server.
 
+<p align="center">
+  <img src="../images/retrigger%20analysis.png" alt="Retrigger Analysis Queue" width="800" />
+</p>
+
 ### 4. 👥 User Management
 - View all registered users.
 - Promote or demote user roles (**User** $\leftrightarrow$ **Admin**).
 - Toggle account active/disabled status.
+
+<p align="center">
+  <img src="../images/user%20management.png" alt="User Management Panel" width="800" />
+</p>
 
 ---
 

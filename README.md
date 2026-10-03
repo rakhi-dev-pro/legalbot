@@ -37,6 +37,109 @@ Detailed documentation and guides are organized under the [`docs/`](file:///c:/U
 
 ---
 
+## 📸 Visual Walkthrough: User & Admin Workflows
+
+LegalBot provides tailored interfaces for everyday legal reviewers as well as organization administrators. Below is an end-to-end visual walkthrough of both user experiences.
+
+---
+
+### 👤 1. User Workflow: Contract Upload & Interactive Risk Analysis
+
+Standard users can securely ingest contracts, monitor local AI processing, navigate document pages, and review clause-level risk recommendations with side-by-side highlighting.
+
+#### Step 1: Secure Contract Upload
+Upload agreements (`.pdf`, `.docx` up to 50 MB) via an intuitive drag-and-drop modal. Uploaded files are immediately encrypted at rest using AES-256-GCM.
+
+<p align="center">
+  <img src="images/upload.png" alt="Contract Upload Modal" width="850" />
+</p>
+
+#### Step 2: Real-Time Local AI Processing
+A progress indicator monitors the multi-stage local pipeline (PyMuPDF / docx extraction $\rightarrow$ spaCy NER entity detection $\rightarrow$ deterministic rule matching $\rightarrow$ IBM Granite 3B LLM parallel inference).
+
+<p align="center">
+  <img src="images/wait.png" alt="Processing State" width="850" />
+</p>
+
+#### Step 3: Ingestion Confirmation & Document Repository
+Once processed, contracts are stored with analysis metadata. Users can view their full contract catalog, complete with risk severity tags and date timestamps.
+
+<p align="center">
+  <img src="images/uploaded.png" alt="Document Uploaded Confirmation" width="850" />
+</p>
+
+<p align="center">
+  <img src="images/view_documents.png" alt="Document Repository" width="850" />
+</p>
+
+#### Step 4: Executive Summary & Categorized Risk Breakdown
+The right-hand analysis panel provides key contract metadata (Parties, Jurisdiction, Effective Date), risk distributions, and expandable risk cards categorized into High, Medium, and Low severity.
+
+<p align="center">
+  <img src="images/right%20panel.png" alt="Executive Summary Panel" width="850" />
+</p>
+
+<p align="center">
+  <img src="images/view%20risks.png" alt="Detected Risk Clauses" width="850" />
+</p>
+
+#### Step 5: Side-by-Side Interactive Reader & Multi-Select Highlighting
+Review original text with page-by-page navigation (`Pg 1`, `Pg 2` with risk count badges) and section dividers. Clicking any risk card pins the clause and highlights matching document sections on the left panel with color-coded risk borders.
+
+<p align="center">
+  <img src="images/annotated%20doc.png" alt="Side-by-Side Interactive Reader" width="850" />
+</p>
+
+#### Step 6: Actionable Recommendations & Evidence Strength
+Inspect individual clauses to view dual-AI confidence metrics (regex pattern + zero-shot LLM validation) and AI-generated negotiation recommendations for counter-drafting.
+
+<p align="center">
+  <img src="images/detailed%20selected%20risk%20and%20its%20clause.png" alt="Clause Detail and AI Action Recommendation" width="850" />
+</p>
+
+---
+
+### 🛡️ 2. Administrator Workflow: Governance, Dynamic Rules & User Management
+
+Administrators (`admin@legalbot.com`) have full access to system-wide analytics, live rule customization, rule simulation, document re-analysis queues, and user management.
+
+#### Step 1: Analytics & KPI Dashboard
+Get real-time visibility into organization-wide metrics: total analyzed contracts, high-risk flags, active risk classification rules, and pipeline throughput.
+
+<p align="center">
+  <img src="images/admin%20dashboard.png" alt="Admin Analytics Dashboard" width="850" />
+</p>
+
+#### Step 2: Custom Risk Rule Creation
+Create custom risk categories (e.g., *Data Protection / GDPR*, *Non-Solicitation*, *IP Assignment*) with custom severity levels, confidence thresholds, and keyword triggers without code deployment.
+
+<p align="center">
+  <img src="images/add%20custom%20rule.png" alt="Add Custom Rule Modal" width="850" />
+</p>
+
+#### Step 3: Live Rule Simulation & Clause Matching
+Test and calibrate rule sensitivity before saving. The built-in chunk tester simulates rule execution against sample clauses in real time.
+
+<p align="center">
+  <img src="images/edit%20rule%20and%20simulate%20rule.png" alt="Edit Rule and Simulate Match" width="850" />
+</p>
+
+#### Step 4: Batch Document Re-Analysis
+When legal policies or risk rules are updated, trigger single or sequential batch re-analysis across the document repository. Jobs run in a managed background queue to prevent local GPU/CPU overload.
+
+<p align="center">
+  <img src="images/retrigger%20analysis.png" alt="Retrigger Document Analysis" width="850" />
+</p>
+
+#### Step 5: Role-Based User Management
+View all registered accounts, promote users to Administrator, demote privileges, or disable access with instant role synchronization.
+
+<p align="center">
+  <img src="images/user%20management.png" alt="User Management Panel" width="850" />
+</p>
+
+---
+
 ## 📐 Architecture Overview
 
 ```mermaid
