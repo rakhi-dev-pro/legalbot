@@ -45,7 +45,10 @@ async def call_llama_cpp_completion(
             resp = await client.post(url, json=payload)
             if resp.status_code == 200:
                 data = resp.json()
-                return data["choices"][0]["message"]["content"].strip()
+                content = data["choices"][0]["message"]["content"].strip()
+                # Clean native chain-of-thought reasoning tags if present (e.g., Granite 4.2 <think>...</think>)
+                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                return content
             else:
                 raise RuntimeError(f"llama.cpp error {resp.status_code}: {resp.text}")
 

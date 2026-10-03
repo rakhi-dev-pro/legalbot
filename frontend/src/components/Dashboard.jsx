@@ -137,7 +137,7 @@ export default function Dashboard({ documents, loading, onSelectDocReport, onNav
               <Cpu className="w-5 h-5" />
             </div>
           </div>
-          <p className="text-lg font-bold text-slate-100 mt-2">IBM Granite 4.1 3B</p>
+          <p className="text-lg font-bold text-slate-100 mt-2">IBM Granite 4.2 3B</p>
           <p className="text-[11px] text-amber-300/80 mt-1 font-mono">Local llama.cpp GGUF</p>
         </div>
 

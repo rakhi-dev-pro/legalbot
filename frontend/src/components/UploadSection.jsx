@@ -167,7 +167,7 @@ startxref
       {/* Title Banner */}
       <div className="text-center space-y-2">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20 mb-2">
-          <Sparkles className="w-3.5 h-3.5" /> Powered by Local IBM Granite 4.1 3B GGUF Model
+          <Sparkles className="w-3.5 h-3.5" /> Powered by Local IBM Granite 4.2 3B GGUF Model
         </div>
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-100">
           Upload Legal Contract for Risk Analysis
@@ -316,7 +316,7 @@ startxref
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-slate-200">Granite 4.1 3B AI Model</h4>
+            <h4 className="text-xs font-bold text-slate-200">Granite 4.2 3B AI Model</h4>
             <p className="text-[11px] text-slate-400 mt-1">IBM quantized GGUF served via llama.cpp for high-precision legal extraction.</p>
           </div>
         </div>

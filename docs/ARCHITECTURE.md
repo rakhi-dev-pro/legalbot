@@ -1,6 +1,6 @@
 # 🏗️ LegalBot System Architecture & Technical Design
 
-LegalBot is an enterprise-grade, privacy-first **Contract Intelligence and Risk Analysis Platform**. It runs completely on local infrastructure, utilizing local LLM inference (IBM Granite 4.1 3B GGUF via `llama.cpp`) to ensure **zero sensitive legal document leakage** to cloud APIs.
+LegalBot is an enterprise-grade, privacy-first **Contract Intelligence and Risk Analysis Platform**. It runs completely on local infrastructure, utilizing local LLM inference (IBM Granite 4.2 3B GGUF via `llama.cpp`) to ensure **zero sensitive legal document leakage** to cloud APIs.
 
 ---
 
@@ -30,7 +30,7 @@ flowchart TB
     end
 
     subgraph InferenceLayer ["Local AI Inference Layer"]
-        LlamaCPP["llama.cpp Server (Port 8080)\n- IBM Granite 4.1 3B Q6_K.gguf\n- Context Window: 4096 tokens"]
+        LlamaCPP["llama.cpp Server (Port 8080)\n- IBM Granite 4.2 3B Q4_K_M.gguf\n- Context Window: 4096 tokens"]
     end
 
     Browser <-->|HTTPS / JSON API| Nginx
@@ -94,7 +94,7 @@ flowchart TB
 
 ### 5. Local LLM Service (`legalbot_llm`)
 - **Container**: `ghcr.io/ggml-org/llama.cpp:server`
-- **Model**: IBM Granite 4.1 3B Instruct (Q6_K quantized GGUF format).
+- **Model**: IBM Granite 4.2 3B Instruct (Q4_K_M quantized GGUF format).
 - **Features**: OpenAI-compatible REST API (`/v1/chat/completions`), 4096 token context window, GPU acceleration support (NVIDIA CUDA ready).
 
 ---

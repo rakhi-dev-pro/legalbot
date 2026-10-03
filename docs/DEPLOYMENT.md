@@ -20,18 +20,19 @@ Before deploying LegalBot, ensure your system has the following installed:
 
 ### Step 1: Model Setup
 
-LegalBot uses the **IBM Granite 4.1 3B Instruct** model in GGUF format (`granite-4.1-3b-Q6_K.gguf`).
+LegalBot uses the **IBM Granite 4.2 3B Instruct** model in GGUF format (`granite-4.2-3b-Q4_K_M.gguf`).
 
-1. Ensure the model file is placed in the `./models/` directory:
+1. **Automatic Download via Docker Compose (Recommended)**:
+   You don't need to manually download the model. On your first `docker compose up -d`, `llama.cpp` will automatically download `granite-4.2-3b-Q4_K_M.gguf` directly from Hugging Face into `./models/` and cache it permanently.
+
+2. **Manual Placement (Optional)**:
+   If preferred, place the model file in the `./models/` directory:
    ```text
    legalbot/
    └── models/
-       └── granite-4.1-3b-Q6_K.gguf
+       └── granite-4.2-3b-Q4_K_M.gguf
    ```
-2. If the model file is missing, download it from Hugging Face or run the provided setup script:
-   ```bash
-   python scripts/download_model.py
-   ```
+   Direct download link: [ibm-granite/granite-4.2-3b-GGUF](https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/blob/main/granite-4.2-3b-Q4_K_M.gguf)
 
 ---
 
@@ -56,7 +57,8 @@ REDIS_PORT=6379
 
 # Local LLM Server Configuration
 LLAMA_CPP_PORT=8080
-LLM_MODEL_FILE=granite-4.1-3b-Q6_K.gguf
+LLM_HF_REPO=ibm-granite/granite-4.2-3b-GGUF
+LLM_MODEL_FILE=granite-4.2-3b-Q4_K_M.gguf
 LLM_CTX_SIZE=4096
 
 # Backend Security

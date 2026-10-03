@@ -4,11 +4,11 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18.0+-61DAFB.svg?logo=react)](https://react.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17%20%2B%20pgvector-4169E1.svg?logo=postgresql)](https://github.com/pgvector/pgvector)
-[![LLM](https://img.shields.io/badge/Local%20LLM-IBM%20Granite%204.1%203B-FF6F00.svg)](https://huggingface.co/ibm-granite)
+[![LLM](https://img.shields.io/badge/Local%20LLM-IBM%20Granite%204.2%203B-FF6F00.svg)](https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 > **Enterprise-grade, privacy-first legal contract analysis platform.**  
-> Processes confidential legal documents completely **offline on local infrastructure** using **IBM Granite 4.1 3B GGUF** via `llama.cpp` and **pgvector**. No external API calls, no third-party data leaks.
+> Processes confidential legal documents completely **offline on local infrastructure** using **IBM Granite 4.2 3B GGUF** via `llama.cpp` and **pgvector**. No external API calls, no third-party data leaks.
 
 ---
 
@@ -47,7 +47,7 @@ graph TD
     
     Backend <--> DB[(PostgreSQL 17 + pgvector)]
     Backend <--> Redis[(Redis 7 Cache)]
-    Backend <-->|Parallel HTTP / LLM| LlamaCPP[llama.cpp Server / IBM Granite 4.1]
+    Backend <-->|Parallel HTTP / LLM| LlamaCPP[llama.cpp Server / IBM Granite 4.2 3B]
 ```
 
 ---
@@ -56,7 +56,7 @@ graph TD
 
 ### 1. Prerequisites
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed & running.
-- IBM Granite model placed in `./models/granite-4.1-3b-Q6_K.gguf`.
+- **Model Download**: Handled automatically! Docker Compose downloads `granite-4.2-3b-Q4_K_M.gguf` directly from Hugging Face on first launch into `./models/`.
 
 ### 2. Clone & Launch
 ```bash
@@ -93,7 +93,7 @@ Use these credentials to log in with full Admin Panel privileges:
 - **Frontend**: React 18, Vite, Tailwind CSS, Lucide Icons, Axios
 - **Backend Engine**: Python 3.11, FastAPI, SQLAlchemy (Async), Pydantic v2, PyMuPDF, python-docx, spaCy
 - **Database & Cache**: PostgreSQL 17 + `pgvector` (HNSW indexing), Redis 7 (AioRedis)
-- **Local AI Inference**: `llama.cpp` server hosting IBM Granite 4.1 3B Instruct (GGUF Q6_K)
+- **Local AI Inference**: `llama.cpp` server hosting IBM Granite 4.2 3B Instruct (GGUF Q4_K_M)
 - **Reverse Proxy & Security**: Nginx (SSL/TLS termination, HTTP/2, client limits), Bcrypt, OAuth2 JWT
 
 ---
