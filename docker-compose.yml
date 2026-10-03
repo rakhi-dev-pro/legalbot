@@ -53,6 +53,9 @@ services:
     image: ghcr.io/ggml-org/llama.cpp:server
     container_name: legalbot_llm
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     ports:
       - "${LLAMA_CPP_PORT:-8080}:8080"
     volumes:
