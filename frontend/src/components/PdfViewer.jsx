@@ -560,8 +560,8 @@ export default function PdfViewer({
                                     {isClauseSelected ? '✓ Inspected in right panel' : '👉 Click to inspect'}
                                   </span>
                                   {hl.confidence_score && (
-                                    <span className="text-slate-500 font-mono">
-                                      Conf: {Math.round(hl.confidence_score * 100)}%
+                                    <span className="text-slate-500 font-mono" title="Evidence Strength Heuristic">
+                                      Evidence: {Math.round(hl.confidence_score * 100)}%
                                     </span>
                                   )}
                                 </div>

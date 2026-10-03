@@ -114,8 +114,9 @@ export const fetchAnnotatedPdfBlob = async (docId, selectedClauseIds = []) => {
 };
 
 // --- AI Analysis & Report Endpoints ---
-export const triggerDocumentAnalysis = async (docId) => {
-  const response = await api.post(`/reports/analyze/${docId}`);
+export const triggerDocumentAnalysis = async (docId, force = false) => {
+  const url = force ? `/reports/analyze/${docId}?force=true` : `/reports/analyze/${docId}`;
+  const response = await api.post(url);
   return response.data;
 };
 

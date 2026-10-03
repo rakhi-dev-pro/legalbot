@@ -1,0 +1,91 @@
+name: LegalBot CI Pipeline
+
+on:
+  push:
+    branches: [ main, master, dev ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  backend-tests:
+    name: Backend Lint & Unit Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: legal_admin
+          POSTGRES_PASSWORD: legalbot_secure_pass_2026
+          POSTGRES_DB: legalbot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install pytest flake8
+
+      - name: Run Python syntax & linting checks
+        run: |
+          flake8 backend/services backend/routers --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run Phase 2 & 3 NLP Unit Tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://legal_admin:legalbot_secure_pass_2026@localhost:5432/legalbot
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test_github_actions_secret_key_2026
+          PYTHONPATH: ./backend
+        run: |
+          python backend/tests/test_phase2_nlp.py
+          python backend/tests/test_phase3_admin_rules.py
+
+  frontend-build:
+    name: Frontend Lint & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend bundle
+        run: |
+          cd frontend
+          npm run build

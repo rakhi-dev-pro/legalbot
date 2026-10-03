@@ -45,8 +45,8 @@ export default function UploadSection({ onAnalysisComplete, onOpenAuth, isAuthen
       setErrorMsg('Invalid file format. Please upload a PDF or DOCX legal document.');
       return;
     }
-    if (selectedFile.size > 25 * 1024 * 1024) {
-      setErrorMsg('File size exceeds maximum limit of 25MB.');
+    if (selectedFile.size > 50 * 1024 * 1024) {
+      setErrorMsg('File size exceeds maximum limit of 50MB.');
       return;
     }
     setFile(selectedFile);
@@ -221,7 +221,7 @@ startxref
                 {file ? file.name : 'Click to select or drag and drop legal document'}
               </p>
               <p className="text-xs text-slate-400 mt-1">
-                Supports PDF and DOCX files (Up to 25 MB)
+                Supports PDF and DOCX files (Up to 50 MB)
               </p>
             </div>
 

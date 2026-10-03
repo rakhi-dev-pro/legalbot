@@ -67,9 +67,9 @@ def decode_token(token: str) -> Dict[str, Any]:
 async def revoke_token(jti: str, ttl_seconds: int = 604800):
     """Store revoked JTI token in Redis blacklist."""
     try:
-        r = aioredis.from_url(settings.REDIS_URL)
-        await r.set(f"revoked_token:{jti}", "true", ex=ttl_seconds)
-        await r.close()
+        from services.redis_service import get_redis
+        async with get_redis() as r:
+            await r.set(f"revoked_token:{jti}", "true", ex=ttl_seconds)
     except Exception as e:
         print(f"Warning: Failed to blacklist token in Redis: {e}")
 
@@ -77,9 +77,9 @@ async def revoke_token(jti: str, ttl_seconds: int = 604800):
 async def is_token_revoked(jti: str) -> bool:
     """Check if JTI token is blacklisted in Redis."""
     try:
-        r = aioredis.from_url(settings.REDIS_URL)
-        val = await r.get(f"revoked_token:{jti}")
-        await r.close()
-        return val is not None
+        from services.redis_service import get_redis
+        async with get_redis() as r:
+            val = await r.get(f"revoked_token:{jti}")
+            return val is not None
     except Exception:
         return False

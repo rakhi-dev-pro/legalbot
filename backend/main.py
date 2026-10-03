@@ -23,9 +23,39 @@ async def lifespan(app: FastAPI):
         print("✅ Database tables, pgvector HNSW indexes & Security Layer verified.")
     except Exception as e:
         print(f"⚠️ Warning: Could not auto-initialize DB on startup: {e}")
+
+    # Startup recovery: Reset any documents stranded in 'processing' across server restart/crash
+    try:
+        from database import AsyncSessionLocal
+        from models import Document, DocumentStatus
+        from sqlalchemy import update
+        async with AsyncSessionLocal() as session:
+            stuck_res = await session.execute(
+                update(Document)
+                .where(Document.status == DocumentStatus.PROCESSING)
+                .values(
+                    status=DocumentStatus.FAILED,
+                    error_message="Analysis interrupted by backend service restart. Please re-run or use Force Re-analyze."
+                )
+            )
+            await session.commit()
+            if stuck_res.rowcount > 0:
+                print(f"🔄 Recovered {stuck_res.rowcount} orphaned processing document(s).")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not auto-recover stuck documents on startup: {e}")
+
+    if settings.SECRET_KEY == "super_secret_legalbot_jwt_key":
+        print("🔒 Security Notice: Using default development SECRET_KEY. Configure custom SECRET_KEY for production.")
+
     yield
+
     # Shutdown logic
     print("👋 Shutting down LegalBot Backend...")
+    try:
+        from services.redis_service import close_redis_pool
+        await close_redis_pool()
+    except Exception:
+        pass
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -36,10 +66,11 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Enable CORS for React Frontend development
+# Enable CORS with explicit allowed origins (replaces insecure wildcard *)
+allowed_origins = [orig.strip() for orig in settings.CORS_ORIGINS.split(",") if orig.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

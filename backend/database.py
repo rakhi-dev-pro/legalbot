@@ -207,6 +207,16 @@ async def init_db():
                 WHEN duplicate_column THEN NULL;
             END $$;
         """))
+
+        # Ensure unique constraint on (document_id, chunk_index) prevents duplicate chunks during concurrent analysis
+        await conn.execute(text("""
+            DO $$ BEGIN
+                ALTER TABLE document_chunks ADD CONSTRAINT uq_document_chunk_index UNIQUE (document_id, chunk_index);
+            EXCEPTION
+                WHEN duplicate_table THEN NULL;
+                WHEN duplicate_object THEN NULL;
+            END $$;
+        """))
     
     # 4. Seed missing risk rules into database
     async with AsyncSessionLocal() as session:

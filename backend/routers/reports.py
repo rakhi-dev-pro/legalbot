@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db, AsyncSessionLocal
-from models import User, Document, AnalysisReport
+from models import User, Document, AnalysisReport, DocumentStatus
 from schemas.report import AnalysisReportResponse
 from dependencies.auth import get_current_user
 from services.nlp_pipeline import process_document_ai_analysis
@@ -35,12 +35,16 @@ async def trigger_document_analysis(
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-    if doc.status == "processing" and not force:
+    if doc.status == DocumentStatus.PROCESSING and not force:
         return {
             "status": "processing",
             "message": "AI Document Analysis is currently in progress. Pass ?force=true to restart if stuck.",
             "document_id": str(doc_id)
         }
+
+    doc.status = DocumentStatus.PROCESSING
+    doc.error_message = None
+    await db.commit()
 
     # Dispatch background task using factory session
     background_tasks.add_task(process_document_ai_analysis, doc_id, AsyncSessionLocal)

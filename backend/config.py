@@ -16,5 +16,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "90.0"))
+    CORS_ORIGINS: str = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,https://localhost:3000,http://localhost:5173,https://localhost:5173,http://localhost,https://localhost,http://127.0.0.1:3000,https://127.0.0.1:3000"
+    )
 
 settings = Settings()

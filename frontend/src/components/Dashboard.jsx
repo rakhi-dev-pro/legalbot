@@ -239,9 +239,29 @@ export default function Dashboard({ documents, loading, onSelectDocReport, onNav
                         </button>
 
                         <button
+                          onClick={async () => {
+                            try {
+                              setProcessingDocId(doc.id);
+                              await triggerDocumentAnalysis(doc.id, true);
+                              alert(`Re-analysis dispatched with ?force=true for "${doc.original_filename}".`);
+                              onRefresh();
+                            } catch (e) {
+                              alert('Failed to trigger re-analysis: ' + (e.response?.data?.detail || e.message));
+                            } finally {
+                              setProcessingDocId(null);
+                            }
+                          }}
+                          disabled={processingDocId === doc.id}
+                          title="Force re-run AI risk analysis"
+                          className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition cursor-pointer"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${processingDocId === doc.id ? 'animate-spin' : ''}`} />
+                        </button>
+
+                        <button
                           onClick={() => handleDelete(doc.id, doc.original_filename)}
                           title="Delete Contract"
-                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition"
+                          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition cursor-pointer"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>

@@ -998,7 +998,7 @@ async def process_document_ai_analysis(doc_id: uuid.UUID, async_session_factory)
             # 8. Pre-compute and cache PDF highlights in Redis so UI displays them instantly (2ms)
             if (document.file_type or "").upper() == "PDF":
                 try:
-                    import redis.asyncio as aioredis
+                    from services.redis_service import get_redis
                     from services.pdf_highlighter import extract_pdf_highlights
 
                     # Query saved clauses with database UUIDs
@@ -1020,8 +1020,8 @@ async def process_document_ai_analysis(doc_id: uuid.UUID, async_session_factory)
                         for c in saved_clauses
                     ]
                     page_hl = extract_pdf_highlights(file_bytes, clauses_for_hl)
-                    r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-                    await r.set(f"pdf_highlights:{doc_id}", json.dumps(page_hl), ex=86400 * 7)
+                    async with get_redis() as r:
+                        await r.set(f"pdf_highlights:{doc_id}", json.dumps(page_hl), ex=86400 * 7)
                     logger.info(f"Pre-cached PDF highlights in Redis for Document ID {doc_id}")
                 except Exception as ex:
                     logger.warning(f"Failed to pre-cache highlights in Redis: {ex}")

@@ -17,7 +17,7 @@ from services.pdf_highlighter import extract_pdf_highlights, generate_annotated_
 router = APIRouter(prefix="/docs", tags=["Document Management & Ingestion"])
 
 ALLOWED_EXTENSIONS = {"pdf", "docx", "doc"}
-MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB Limit
+MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB Limit
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -28,7 +28,7 @@ async def upload_legal_document(
 ):
     """
     Secure Document Upload Endpoint (Requires Bearer JWT Token):
-    - Validates file extension (PDF or DOCX) & size (max 25 MB).
+    - Validates file extension (PDF or DOCX) & size (max 50 MB).
     - Encrypts file at rest with AES-256 before disk storage.
     - Computes SHA-256 hash for audit deduplication.
     - Saves document record linked to authenticated user.
@@ -50,7 +50,7 @@ async def upload_legal_document(
     if file_size > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File size exceeds maximum allowed limit of 25 MB ({round(file_size/(1024*1024), 2)} MB provided)."
+            detail=f"File size exceeds maximum allowed limit of 50 MB ({round(file_size/(1024*1024), 2)} MB provided)."
         )
 
     if file_size == 0:
@@ -221,10 +221,11 @@ async def get_document_highlights(
 
     cache_key = f"pdf_highlights:{doc_id}"
     try:
-        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-        cached_data = await r.get(cache_key)
-        if cached_data:
-            return json.loads(cached_data)
+        from services.redis_service import get_redis
+        async with get_redis() as r:
+            cached_data = await r.get(cache_key)
+            if cached_data:
+                return json.loads(cached_data)
     except Exception:
         pass
 
@@ -260,8 +261,9 @@ async def get_document_highlights(
 
         # Store in Redis for instant subsequent retrieval
         try:
-            r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-            await r.set(cache_key, json.dumps(page_highlights), ex=86400 * 7)
+            from services.redis_service import get_redis
+            async with get_redis() as r:
+                await r.set(cache_key, json.dumps(page_highlights), ex=86400 * 7)
         except Exception:
             pass
 

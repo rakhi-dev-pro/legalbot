@@ -66,14 +66,22 @@ flowchart TB
   - Signed JWT tokens with customizable expiry (`ACCESS_TOKEN_EXPIRE_MINUTES`).
   - Role-Based Access Control (RBAC): `user` vs `admin`.
 
-### 3. NLP & Risk Analysis Engine (`services/nlp_pipeline.py`)
+### 3. Hybrid NLP & Risk Analysis Engine (`services/nlp_pipeline.py`)
 - **Multi-Stage Processing**:
-  1. **Text Extraction**: PyMuPDF (`fitz`) for digital PDFs, `python-docx` for DOCX, with fallback OCR handling for image/eSigned PDFs.
-  2. **Entity Extraction**: spaCy NER extracts contract entities: Parties, Effective Dates, Jurisdiction, Governing Law, Monetary Amounts.
-  3. **Document Chunking**: Smart section splitting (~300 words per chunk) tied to page numbers.
-  4. **Rule-Based Risk Classification**: Scans chunks against active risk rules (Indemnity, Unilateral Termination, Limitation of Liability, Security Deposit, Eviction, Late Payment, Non-Compete, etc.).
-  5. **Category-Level Deduplication**: Merges overlapping hits across consecutive chunks, retaining the longest context and earliest page number.
-  6. **Parallel LLM Recommendation Generation**: Dispatches concurrent requests (`asyncio.gather`) to IBM Granite LLM via `llama.cpp` to generate 2–3 sentence actionable review advice per risk clause.
+  1. **Text Extraction**: PyMuPDF (`fitz`) for digital PDFs, `python-docx` for DOCX, with fallback OCR handling for image/scanned PDFs.
+  2. **Entity Recognition & Extraction**: Extracts contract entities: Parties, Effective Dates, Jurisdiction, Governing Law, Monetary Amounts.
+  3. **Document Chunking**: Section splitting (~300 words per chunk) maintaining exact page boundaries.
+  4. **Deterministic Rule Classification**: Scans chunks against 19 canonical risk rules with exact slug mapping (`CATEGORY_CANONICAL_MAP`) and compound regexes.
+  5. **Zero-Shot LLM Semantic Verification**: Dispatches rule-matched and ambiguous chunks to IBM Granite via `llama.cpp` using a rate-limiting semaphore (`asyncio.Semaphore(2)`) for true hybrid coverage.
+  6. **Calibrated Evidence Strength Tiers**: Assigns discrete evidence scores:
+     - `0.95`: Dual AI + deterministic regex confirmation.
+     - `0.88`: Exact multi-word legal phrase match.
+     - `0.82`: High-confidence zero-shot LLM classification (clears High-risk 0.75 threshold).
+     - `0.78`: Contextual single-keyword match.
+     - `0.72`: Fallback heuristic score.
+  7. **Risk Policy Decider with Conservative Safety Floor**: Computes composite risk score; any document with at least one verified High-risk clause is guaranteed an overall rating of **High Risk** to prevent costly legal under-warning.
+  8. **Batched Recommendation Generation**: Synthesizes negotiation advice in a single prompt to optimize local LLM throughput.
+  9. **Pre-computed Highlight Caching**: Pre-calculates quadpoint PDF highlights into pooled Redis cache for instant (2ms) frontend rendering.
 
 ### 4. Database Layer (`legalbot_db`)
 - **PostgreSQL 17 + pgvector**:

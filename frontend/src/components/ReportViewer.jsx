@@ -28,19 +28,22 @@ import {
   PenTool, 
   Compass,
   FileSearch,
-  CheckSquare
+  CheckSquare,
+  RotateCw
 } from 'lucide-react';
 import { 
   fetchDocumentChunks, 
   fetchDocumentPdfBlob, 
   fetchDocumentHighlights, 
-  fetchAnnotatedPdfBlob 
+  fetchAnnotatedPdfBlob,
+  triggerDocumentAnalysis
 } from '../services/api';
 import PdfViewer from './PdfViewer';
 
 export default function ReportViewer({ report, onBack }) {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedSeverity, setSelectedSeverity] = useState('ALL');
+  const [reanalyzing, setReanalyzing] = useState(false);
   
   // Multi-select: List of clause IDs currently selected for highlighting on PDF
   const [selectedClauseIds, setSelectedClauseIds] = useState([]);
@@ -240,6 +243,20 @@ export default function ReportViewer({ report, onBack }) {
     window.print();
   };
 
+  const handleForceReanalyze = async () => {
+    if (!report?.document_id) return;
+    setReanalyzing(true);
+    try {
+      await triggerDocumentAnalysis(report.document_id, true);
+      alert('AI Risk re-analysis has been dispatched with ?force=true. Please refresh in a moment to view updated findings.');
+    } catch (err) {
+      console.error('Failed to force re-analyze:', err);
+      alert('Could not trigger re-analysis: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setReanalyzing(false);
+    }
+  };
+
   const SeverityChip = ({ level, className = '' }) => {
     const norm = (level || '').toUpperCase();
     if (norm === 'HIGH') {
@@ -369,6 +386,16 @@ export default function ReportViewer({ report, onBack }) {
               <Layers className="w-3.5 h-3.5" /> Report Only
             </button>
           </div>
+
+          <button
+            onClick={handleForceReanalyze}
+            disabled={reanalyzing}
+            className="flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-semibold border border-amber-500/30 transition cursor-pointer disabled:opacity-50"
+            title="Force re-run AI risk analysis pipeline"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${reanalyzing ? 'animate-spin' : ''}`} />
+            <span>{reanalyzing ? 'Re-analyzing...' : 'Force Re-analyze'}</span>
+          </button>
 
           <button
             onClick={handlePrintReport}
@@ -759,7 +786,9 @@ export default function ReportViewer({ report, onBack }) {
                       <SeverityChip level={activeClause.risk_level} />
                     </div>
                     <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
-                      <span>Confidence: {Math.round(activeClause.confidence_score * 100)}%</span>
+                      <span title="Evidence Strength tiers: 95% Dual AI+Regex, 88% Exact Phrase, 82% LLM Semantic, 78% Contextual">
+                        Evidence Strength: {Math.round(activeClause.confidence_score * 100)}%
+                      </span>
                       {activeClause.page_number && (
                         <span>• Found on Page {activeClause.page_number}</span>
                       )}

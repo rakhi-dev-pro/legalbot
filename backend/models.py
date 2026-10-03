@@ -13,7 +13,8 @@ from sqlalchemy import (
     ForeignKey,
     Enum as SQLEnum,
     JSON,
-    func
+    func,
+    UniqueConstraint
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -107,6 +108,10 @@ class DocumentChunk(Base):
 
     # Relationship
     document: Mapped["Document"] = relationship("Document", back_populates="chunks")
+
+    __table_args__ = (
+        UniqueConstraint("document_id", "chunk_index", name="uq_document_chunk_index"),
+    )
 
 
 class AnalysisReport(Base):

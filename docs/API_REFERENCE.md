@@ -134,12 +134,15 @@ Fetch decrypted section text chunks grouped by page numbers for document reader.
 ### `POST /reports/analyze/{document_id}`
 Dispatch background AI analysis pipeline for an uploaded contract.
 
+**Query Parameters:**
+* `force` (`boolean`, optional, default: `false`): Pass `?force=true` to restart and force re-analysis if a document was interrupted or failed.
+
 **Response (`202 Accepted`):**
 ```json
 {
   "document_id": "3cf20b79-6602-499c-832e-511d8af79baa",
   "status": "accepted",
-  "message": "AI risk analysis pipeline dispatched."
+  "message": "AI Analysis pipeline dispatched in background."
 }
 ```
 
@@ -151,44 +154,69 @@ Retrieve completed analysis report or poll processing status.
 **Response (`200 OK`):**
 ```json
 {
-  "id": "report-uuid",
+  "id": "report-uuid-4a2e",
   "document_id": "3cf20b79-6602-499c-832e-511d8af79baa",
   "overall_risk": "High",
-  "executive_summary": "Legal agreement containing 4 clause sections...",
+  "composite_risk_score": 11.4,
+  "executive_summary": "This Employment Agreement between TechCorp Inc. and Deepanshu provides for full-time employment as Senior AI Engineer at an annual compensation of $120,000. Key terms include a 3-month probation period, mutual 30-day notice for termination, and standard IP assignment. Significant risk factors include an aggressive 2-year post-termination non-compete covenant and a unilateral indemnity clause requiring employee indemnification.",
   "model_used": "granite-4.1-3b-Q6_K.gguf",
-  "processing_time_seconds": 4.9,
+  "processing_time_seconds": 6.8,
+  "total_risks_found": 3,
   "key_entities": {
     "effective_dates": ["June 23, 2025"],
     "jurisdiction": "Virginia, USA",
-    "governing_law": "Not Specified"
+    "governing_law": "Laws of Virginia",
+    "parties": ["TechCorp Inc.", "Deepanshu"],
+    "monetary_amounts": ["$120,000"]
   },
   "risk_clauses": [
     {
       "id": "clause-uuid-1",
-      "clause_type": "Unilateral Termination",
+      "clause_type": "Indemnity & Hold Harmless",
       "risk_level": "High",
-      "confidence_score": 0.9,
-      "explanation": "Allows one party to terminate without cause...",
-      "clause_text": "6. Confidentiality and IP...",
-      "recommendation": "Negotiate a 30-day mutual written notice requirement for termination.",
+      "confidence_score": 0.95,
+      "explanation": "Mandates broad unilateral indemnification by employee.",
+      "clause_text": "Employee shall indemnify and hold harmless the Company...",
+      "recommendation": "Negotiate a mutual indemnification cap limited to gross negligence.",
       "page_number": 2
     }
   ]
 }
 ```
 
+> **Note on Evidence Strength (`confidence_score`):**
+> Scores represent calibrated evidence tiers rather than statistical probability:
+> * `0.95`: Dual AI confirmation (both deterministic regex rule and zero-shot LLM independently detected the clause).
+> * `0.88`: Exact multi-word legal phrase match (e.g. *"indemnify and hold harmless"*).
+> * `0.82`: High-confidence zero-shot LLM classification (satisfies the 0.75 threshold for High-risk rules).
+> * `0.78`: Single keyword with supportive contractual context terms.
+> * `0.72`: Fallback heuristic score.
+
 ---
 
 ## 🛡️ 4. Admin Management Endpoints (`/admin`)
-*Requires Admin Role (`role == "admin"`) Authorization Header.*
+*Requires Admin Role (`role == "admin"`) Bearer JWT Authorization Header.*
 
 ### `GET /admin/stats`
-Retrieve system-wide KPIs and risk analytics.
+Retrieve system-wide KPIs, counts, and aggregated risk level distribution.
+
+**Response (`200 OK`):**
+```json
+{
+  "total_users": 1,
+  "total_documents": 12,
+  "total_reports": 10,
+  "active_rules_count": 19,
+  "high_risk_docs": 4,
+  "medium_risk_docs": 5,
+  "low_risk_docs": 1
+}
+```
 
 ---
 
 ### `GET /admin/rules`
-List all configured risk classification rules.
+List all 19 configured risk classification rules (category, default risk level, confidence threshold, weight, keywords).
 
 ---
 
@@ -202,14 +230,15 @@ Create a new custom risk rule.
   "default_risk_level": "High",
   "confidence_threshold": 0.75,
   "weight": 1.8,
-  "description": "Requires data controller to indemnify for data breach losses."
+  "keywords": "gdpr, data controller, personal data breach",
+  "description": "Requires data processor to indemnify for data breach losses."
 }
 ```
 
 ---
 
 ### `PUT /admin/rules/{rule_id}`
-Update an existing risk rule.
+Update dynamic thresholds, weights, or trigger keywords for an existing rule.
 
 ---
 
@@ -218,13 +247,35 @@ Delete a risk rule.
 
 ---
 
-### `GET /admin/users`
-List all registered system users.
+### `POST /admin/rules/reset`
+Reset all rule categories, weights, and thresholds to system default 19 rules.
 
 ---
 
-### `PUT /admin/users/{user_id}/role`
-Update user role (`user` or `admin`).
+### `POST /admin/rules/test-chunk`
+Interactive test utility to verify how rule regexes match a sample contract excerpt.
+
+**Request Body (`application/json`):**
+```json
+{
+  "chunk_text": "The annual rent shall increase by 10% every year on the anniversary date."
+}
+```
+
+---
+
+### `GET /admin/documents`
+List all documents across all users with processing statuses, risk scores, and owner information.
+
+---
+
+### `POST /admin/documents/{doc_id}/reanalyze`
+Invalidate highlight cache and trigger background re-analysis of a specific document using current rules.
+
+---
+
+### `POST /admin/documents/reanalyze-all`
+Sequentially queue all documents in the system for background re-analysis without overloading the LLM server.
 
 ---
 

@@ -460,9 +460,9 @@ async def admin_reanalyze_document(
 
     # Invalidate Redis highlight cache
     try:
-        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-        await r.delete(f"pdf_highlights:{doc_id}")
-        await r.aclose()
+        from services.redis_service import get_redis
+        async with get_redis() as r:
+            await r.delete(f"pdf_highlights:{doc_id}")
     except Exception as e:
         logger.warning(f"Could not clear Redis highlight cache for {doc_id}: {e}")
 
@@ -477,6 +477,15 @@ async def admin_reanalyze_document(
     }
 
 
+async def _process_documents_sequentially(doc_ids: List[uuid.UUID]):
+    """Execute AI analysis for a list of documents sequentially to avoid LLM resource starvation."""
+    for doc_id in doc_ids:
+        try:
+            await process_document_ai_analysis(doc_id, AsyncSessionLocal)
+        except Exception as e:
+            logger.error(f"Sequential batch analysis failed for doc {doc_id}: {e}")
+
+
 @router.post("/documents/reanalyze-all")
 async def admin_reanalyze_all_documents(
     background_tasks: BackgroundTasks,
@@ -484,27 +493,37 @@ async def admin_reanalyze_all_documents(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Batch re-analyze all active documents with current dynamic rules configuration.
+    Batch re-analyze all active documents sequentially to protect LLM queue.
     """
     docs_res = await db.execute(select(Document))
     documents = docs_res.scalars().all()
-    count = 0
+    if not documents:
+        return {
+            "status": "accepted",
+            "queued_count": 0,
+            "message": "No documents found to re-analyze."
+        }
+
+    doc_ids = [doc.id for doc in documents]
 
     try:
-        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-        for doc in documents:
-            await r.delete(f"pdf_highlights:{doc.id}")
-            doc.status = DocumentStatus.PROCESSING
-            background_tasks.add_task(process_document_ai_analysis, doc.id, AsyncSessionLocal)
-            count += 1
+        from services.redis_service import get_redis
+        async with get_redis() as r:
+            for doc in documents:
+                await r.delete(f"pdf_highlights:{doc.id}")
+                doc.status = DocumentStatus.PENDING
+
+        # Mark first document as processing, queue the batch worker
+        documents[0].status = DocumentStatus.PROCESSING
         await db.commit()
-        await r.aclose()
     except Exception as e:
-        logger.error(f"Error during reanalyze-all: {e}")
+        logger.error(f"Error preparing reanalyze-all: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to queue re-analysis: {str(e)}")
+
+    background_tasks.add_task(_process_documents_sequentially, doc_ids)
 
     return {
         "status": "accepted",
-        "queued_count": count,
-        "message": f"Queued {count} documents for background re-analysis."
+        "queued_count": len(doc_ids),
+        "message": f"Queued {len(doc_ids)} documents for sequential background re-analysis."
     }

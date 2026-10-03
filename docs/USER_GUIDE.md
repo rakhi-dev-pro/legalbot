@@ -60,14 +60,23 @@ Use the mode switcher in the top right header:
 - If a single document section contains **multiple risks**, all applicable risk badges are displayed together on that section header.
 - Click **Clear highlights** at the top of the reader to reset all selections.
 
-#### E. Per-Clause Actionable Recommendations
-Every detected risk clause features an AI-generated **Recommended Action** card (with a green ✨ icon) providing direct, practical negotiation and protective amendment advice.
+#### E. Per-Clause Actionable Recommendations & Evidence Strength
+- Every detected risk clause features an AI-generated **Recommended Action** card providing practical negotiation and protective amendment advice.
+- **Evidence Strength Score**: Represents calibrated detection certainty:
+  - `95%`: Dual AI confirmation (both deterministic regex rule and zero-shot LLM independently detected the clause).
+  - `88%`: Exact multi-word legal phrase match (e.g. *"indemnify and hold harmless"*).
+  - `82%`: High-confidence zero-shot LLM classification (satisfies the 0.75 threshold for High-risk rules).
+  - `78%`: Single keyword match with supporting legal context terms.
+  - `72%`: Fallback classification score.
+
+#### F. Force Re-Analyze Option
+- If a document analysis was interrupted or dynamic rules were reconfigured, click the **Force Re-analyze** button in the viewer toolbar or dashboard to rerun the complete 7-stage NLP pipeline with `?force=true`.
 
 ---
 
 ## 🛡️ 4. Admin Control Panel
 
-Admin users (`role: "admin"`) will see an **Admin** button in the top navigation navbar. Clicking it opens the 3-tab Admin Control Panel:
+Admin users (`role: "admin"`) will see an **Admin** button in the top navigation navbar. Clicking it opens the Admin Control Panel:
 
 ### 1. 📊 Analytics Dashboard
 - **System KPIs**: Total analyzed contracts, high-risk flags, active risk rules, active system users.
@@ -82,10 +91,17 @@ Admin users (`role: "admin"`) will see an **Admin** button in the top navigation
   - **Default Risk Level** (High, Medium, Low)
   - **Confidence Threshold** (e.g., `0.75`)
   - **Rule Weight** (e.g., `1.8`)
+  - **Custom Keywords** (comma-separated trigger words)
   - **Description**
-- Toggle rule active state or delete rules.
+- Test rules against custom sample clauses using the **Interactive Chunk Match Tester**.
+- Reset all rules back to system default 19 rules via **Reset to Defaults**.
 
-### 3. 👥 User Management
+### 3. 📄 Document Management & Sequential Batch Re-Analysis
+- Inspect all uploaded documents across all system users.
+- Trigger single document re-analysis with currently configured rules.
+- **Re-analyze All Documents**: Dispatches a sequential background worker queue to re-analyze all documents without overloading the local LLM server.
+
+### 4. 👥 User Management
 - View all registered users.
 - Promote or demote user roles (**User** $\leftrightarrow$ **Admin**).
 - Toggle account active/disabled status.
@@ -94,4 +110,4 @@ Admin users (`role: "admin"`) will see an **Admin** button in the top navigation
 
 ## 🖨️ 5. Printing & Exporting PDF Reports
 
-Click **Print / Export PDF** in the top right header of the report viewer to format the executive summary, extracted key entities, detected risk clauses, and action recommendations into a clean PDF printout.
+Click **Print / Export PDF** in the top right header of the report viewer to format the executive summary, extracted key entities, detected risk clauses, and action recommendations into a clean PDF printout. Alternatively, click **Export Annotated PDF** to download the original PDF with visual PyMuPDF annotations and comments embedded directly on the document pages.

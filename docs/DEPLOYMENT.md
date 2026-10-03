@@ -124,6 +124,12 @@ docker compose restart backend
 docker compose up -d --build backend proxy
 ```
 
+### Database Clean Reset & Default Seeding
+To wipe test contracts, chunks, reports, and reset to clean state with default admin:
+```bash
+docker exec -e PYTHONPATH=/app legalbot_backend python scripts/reset_database.py
+```
+
 ### Stopping the Stack
 ```bash
 # Stop containers keeping database volumes intact
