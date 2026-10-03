@@ -54,8 +54,8 @@ flowchart TB
 - **Port Binding**: Maps external `80` and `443` to internal container networks.
 - **SSL Termination**: Self-signed or custom TLS/SSL certificate handling.
 - **Routing Rules**:
-  - `/` → React SPA (`legalbot_frontend:3000`)
-  - `/auth/*`, `/docs/*`, `/reports/*`, `/admin/*`, `/tests/*` → FastAPI Backend (`legalbot_backend:8000`)
+  - `/` -> React SPA (`legalbot_frontend:3000`)
+  - `/auth/*`, `/docs/*`, `/reports/*`, `/admin/*`, `/tests/*` -> FastAPI Backend (`legalbot_backend:8000`)
 - **Client Body Limit**: Configured to `50M` to support large multi-page legal PDFs and scanned contracts.
 
 ### 2. FastAPI Backend Engine (`legalbot_backend`)

@@ -53,7 +53,7 @@ Upload agreements (`.pdf`, `.docx` up to 50 MB) via an intuitive drag-and-drop m
 ![Contract Upload Modal](images/upload.png)
 
 #### Step 2: Real-Time Local AI Processing
-A progress indicator monitors the multi-stage local pipeline (PyMuPDF / docx extraction → spaCy NER entity detection → deterministic rule matching → IBM Granite 3B LLM parallel inference).
+A progress indicator monitors the multi-stage local pipeline (PyMuPDF / docx extraction -> spaCy NER entity detection -> deterministic rule matching -> IBM Granite 3B LLM parallel inference).
 
 ![Processing State](images/wait.png)
 
@@ -67,19 +67,19 @@ Once processed, contracts are stored with analysis metadata. Users can view thei
 #### Step 4: Executive Summary & Categorized Risk Breakdown
 The right-hand analysis panel provides key contract metadata (Parties, Jurisdiction, Effective Date), risk distributions, and expandable risk cards categorized into High, Medium, and Low severity.
 
-![Executive Summary Panel](images/right%20panel.png)
+![Executive Summary Panel](images/right_panel.png)
 
-![Detected Risk Clauses](images/view%20risks.png)
+![Detected Risk Clauses](images/view_risks.png)
 
 #### Step 5: Side-by-Side Interactive Reader & Multi-Select Highlighting
 Review original text with page-by-page navigation (`Pg 1`, `Pg 2` with risk count badges) and section dividers. Clicking any risk card pins the clause and highlights matching document sections on the left panel with color-coded risk borders.
 
-![Side-by-Side Interactive Reader](images/annotated%20doc.png)
+![Side-by-Side Interactive Reader](images/annotated_doc.png)
 
 #### Step 6: Actionable Recommendations & Evidence Strength
 Inspect individual clauses to view dual-AI confidence metrics (regex pattern + zero-shot LLM validation) and AI-generated negotiation recommendations for counter-drafting.
 
-![Clause Detail and AI Action Recommendation](images/detailed%20selected%20risk%20and%20its%20clause.png)
+![Clause Detail and AI Action Recommendation](images/detailed_selected_risk_and_its_clause.png)
 
 ---
 
@@ -90,27 +90,27 @@ Administrators (`admin@legalbot.com`) have full access to system-wide analytics,
 #### Step 1: Analytics & KPI Dashboard
 Get real-time visibility into organization-wide metrics: total analyzed contracts, high-risk flags, active risk classification rules, and pipeline throughput.
 
-![Admin Analytics Dashboard](images/admin%20dashboard.png)
+![Admin Analytics Dashboard](images/admin_dashboard.png)
 
 #### Step 2: Custom Risk Rule Creation
 Create custom risk categories (e.g., *Data Protection / GDPR*, *Non-Solicitation*, *IP Assignment*) with custom severity levels, confidence thresholds, and keyword triggers without code deployment.
 
-![Add Custom Rule Modal](images/add%20custom%20rule.png)
+![Add Custom Rule Modal](images/add_custom_rule.png)
 
 #### Step 3: Live Rule Simulation & Clause Matching
 Test and calibrate rule sensitivity before saving. The built-in chunk tester simulates rule execution against sample clauses in real time.
 
-![Edit Rule and Simulate Match](images/edit%20rule%20and%20simulate%20rule.png)
+![Edit Rule and Simulate Match](images/edit_rule_and_simulate_rule.png)
 
 #### Step 4: Batch Document Re-Analysis
 When legal policies or risk rules are updated, trigger single or sequential batch re-analysis across the document repository. Jobs run in a managed background queue to prevent local GPU/CPU overload.
 
-![Retrigger Document Analysis](images/retrigger%20analysis.png)
+![Retrigger Document Analysis](images/retrigger_analysis.png)
 
 #### Step 5: Role-Based User Management
 View all registered accounts, promote users to Administrator, demote privileges, or disable access with instant role synchronization.
 
-![User Management Panel](images/user%20management.png)
+![User Management Panel](images/user_management.png)
 
 ---
 
@@ -152,7 +152,7 @@ docker compose up -d --build
 Navigate to **[https://localhost](https://localhost)** in your web browser.
 
 > [!NOTE]
-> Because Nginx generates a local self-signed TLS certificate, click **Advanced** → **Proceed to localhost (unsafe)** when prompted by your browser.
+> Because Nginx generates a local self-signed TLS certificate, click **Advanced** -> **Proceed to localhost (unsafe)** when prompted by your browser.
 
 ---
 

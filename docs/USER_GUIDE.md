@@ -48,9 +48,9 @@ Use the mode switcher in the top right header:
 - **Side-by-Side Reader**: Displays the original document text on the left panel and AI risk analysis on the right panel.
 - **Summary Report Only**: Maximize the right panel for high-level executive summaries and print/exporting.
 
-![Executive Summary Panel](../images/right%20panel.png)
+![Executive Summary Panel](../images/right_panel.png)
 
-![Detected Risk Clauses](../images/view%20risks.png)
+![Detected Risk Clauses](../images/view_risks.png)
 
 #### B. Page-Wise Navigation Sidebar
 - The left document reader includes a **vertical Page Navigation Sidebar** (`Pg 1`, `Pg 2`, ...).
@@ -72,7 +72,7 @@ Use the mode switcher in the top right header:
 - If a single document section contains **multiple risks**, all applicable risk badges are displayed together on that section header.
 - Click **Clear highlights** at the top of the reader to reset all selections.
 
-![Side-by-Side Reader with Risk Highlighting](../images/annotated%20doc.png)
+![Side-by-Side Reader with Risk Highlighting](../images/annotated_doc.png)
 
 #### E. Per-Clause Actionable Recommendations & Evidence Strength
 - Every detected risk clause features an AI-generated **Recommended Action** card providing practical negotiation and protective amendment advice.
@@ -83,7 +83,7 @@ Use the mode switcher in the top right header:
   - `78%`: Single keyword match with supporting legal context terms.
   - `72%`: Fallback classification score.
 
-![Clause Detail and AI Action Recommendation](../images/detailed%20selected%20risk%20and%20its%20clause.png)
+![Clause Detail and AI Action Recommendation](../images/detailed_selected_risk_and_its_clause.png)
 
 #### F. Force Re-Analyze Option
 - If a document analysis was interrupted or dynamic rules were reconfigured, click the **Force Re-analyze** button in the viewer toolbar or dashboard to rerun the complete 7-stage NLP pipeline with `?force=true`.
@@ -99,7 +99,7 @@ Admin users (`role: "admin"`) will see an **Admin** button in the top navigation
 - **Risk Severity Distribution**: Breakdown of High, Medium, and Low risk findings.
 - **Processing Status Breakdown**: Completed vs Failed pipeline jobs.
 
-![Admin Analytics Dashboard](../images/admin%20dashboard.png)
+![Admin Analytics Dashboard](../images/admin_dashboard.png)
 
 ### 2. ⚙️ Risk Rules Config (Live CRUD Editor)
 - View and modify active risk classification rules.
@@ -114,23 +114,23 @@ Admin users (`role: "admin"`) will see an **Admin** button in the top navigation
 - Test rules against custom sample clauses using the **Interactive Chunk Match Tester**.
 - Reset all rules back to system default 19 rules via **Reset to Defaults**.
 
-![Add Custom Rule](../images/add%20custom%20rule.png)
+![Add Custom Rule](../images/add_custom_rule.png)
 
-![Edit Rule and Simulate Match](../images/edit%20rule%20and%20simulate%20rule.png)
+![Edit Rule and Simulate Match](../images/edit_rule_and_simulate_rule.png)
 
 ### 3. 📄 Document Management & Sequential Batch Re-Analysis
 - Inspect all uploaded documents across all system users.
 - Trigger single document re-analysis with currently configured rules.
 - **Re-analyze All Documents**: Dispatches a sequential background worker queue to re-analyze all documents without overloading the local LLM server.
 
-![Retrigger Analysis Queue](../images/retrigger%20analysis.png)
+![Retrigger Analysis Queue](../images/retrigger_analysis.png)
 
 ### 4. 👥 User Management
 - View all registered users.
-- Promote or demote user roles (**User** ↔ **Admin**).
+- Promote or demote user roles (**User** <-> **Admin**).
 - Toggle account active/disabled status.
 
-![User Management Panel](../images/user%20management.png)
+![User Management Panel](../images/user_management.png)
 
 ---
 
