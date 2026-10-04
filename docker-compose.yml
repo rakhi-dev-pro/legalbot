@@ -84,11 +84,16 @@ services:
   # llama.cpp waits for this container to finish successfully.
   # ============================================================
   llm-model:
-    image: alpine:3.20
+    image: curlimages/curl:latest
 
     container_name: legalbot_llm_model
 
     restart: "no"
+    user: "0:0"
+
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
 
     environment:
       LLM_MODEL_FILE: ${LLM_MODEL_FILE:-granite-4.2-3b-Q4_K_M.gguf}
@@ -98,9 +103,9 @@ services:
     volumes:
       - ./models:/models
 
+    entrypoint: ["/bin/sh", "-c"]
+
     command:
-      - /bin/sh
-      - -c
       - |
         set -eu
 
@@ -135,12 +140,9 @@ services:
         # Model does not exist - download from Hugging Face
         # --------------------------------------------------------
         echo "[LLM] Model not found: $${MODEL}"
-        echo "[LLM] Installing curl and certificates..."
-        apk add --no-cache curl ca-certificates
-
         echo ""
         echo "[LLM] Download URL: $${HF_DOWNLOAD_URL}"
-        echo "[LLM] Starting download..."
+        echo "[LLM] Starting download via curl..."
         echo ""
 
         rm -f "$${TEMP}"
