@@ -20,19 +20,25 @@ Before deploying LegalBot, ensure your system has the following installed:
 
 ### Step 1: Model Setup
 
-LegalBot uses the **IBM Granite 4.2 3B Instruct** model in GGUF format (`granite-4.2-3b-Q4_K_M.gguf`).
+LegalBot uses the **IBM Granite 4.2 3B Instruct** model in GGUF format (`granite-4.2-3b-Q4_K_M.gguf`, ~2.1 GB).
 
-1. **Automatic Download via Docker Compose (Recommended)**:
-   You don't need to manually download the model. On your first `docker compose up -d`, `llama.cpp` will automatically download `granite-4.2-3b-Q4_K_M.gguf` directly from Hugging Face into `./models/` and cache it permanently.
-
-2. **Manual Placement (Optional)**:
-   If preferred, place the model file in the `./models/` directory:
-   ```text
-   legalbot/
-   └── models/
-       └── granite-4.2-3b-Q4_K_M.gguf
+1. **Pre-Download via `wget` / `curl` (Recommended for GitHub Codespaces & Cloud VMs)**:
+   In cloud environments or GitHub Codespaces, container network egress can be restricted or timeout on large files. Download directly on the host into `./models/`:
+   ```bash
+   mkdir -p models
+   wget -c "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/main/granite-4.2-3b-Q4_K_M.gguf?download=true" -O models/granite-4.2-3b-Q4_K_M.gguf
    ```
-   Direct download link: [ibm-granite/granite-4.2-3b-GGUF](https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/blob/main/granite-4.2-3b-Q4_K_M.gguf)
+   Or using `curl`:
+   ```bash
+   curl -C - -L "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/main/granite-4.2-3b-Q4_K_M.gguf?download=true" -o models/granite-4.2-3b-Q4_K_M.gguf
+   ```
+
+2. **Automatic Download via Docker Compose**:
+   If the model is not present, Docker Compose's `model-downloader` service will automatically fetch and verify the file before spinning up `llm-service`.
+
+> [!WARNING]
+> **Corrupted / Truncated Model Error (`blk.32.ffn_down.weight`)**:
+> If llama-server fails with `tensor 'blk.32.ffn_down.weight' data is not within the file bounds, model is corrupted or incomplete`, your download was interrupted. Check file size with `ls -lh models/granite-4.2-3b-Q4_K_M.gguf` (must be ~2.1 GB / `2,244,011,552` bytes). Delete the incomplete file (`rm -f models/granite-4.2-3b-Q4_K_M.gguf`) and re-download using `wget -c`.
 
 ---
 

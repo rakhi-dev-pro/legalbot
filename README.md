@@ -132,10 +132,10 @@ graph TD
 ## ⚡ Quickstart Guide (3 Minutes)
 
 ### 1. Prerequisites
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed & running.
-- **Model Download**: Handled automatically! Docker Compose downloads `granite-4.2-3b-Q4_K_M.gguf` directly from Hugging Face on first launch into `./models/`.
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker Engine + Docker Compose v2+ installed & running.
+- **Model File**: IBM Granite 4.2 3B Instruct GGUF (`granite-4.2-3b-Q4_K_M.gguf`, ~2.1 GB). Pre-downloading directly via `wget` or `curl` into `./models/` is strongly recommended for GitHub Codespaces or cloud environments.
 
-### 2. Clone & Launch
+### 2. Clone, Download Model & Launch
 ```bash
 # 1. Clone repository
 git clone https://github.com/your-org/legalbot.git
@@ -144,9 +144,19 @@ cd legalbot
 # 2. Setup environment variables
 cp .env.example .env
 
-# 3. Launch full stack with Docker Compose
+# 3. Download the LLM Model (Required for Codespaces / Reliable Egress)
+mkdir -p models
+wget -c "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/main/granite-4.2-3b-Q4_K_M.gguf?download=true" -O models/granite-4.2-3b-Q4_K_M.gguf
+
+# Alternative using curl:
+# curl -C - -L "https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/main/granite-4.2-3b-Q4_K_M.gguf?download=true" -o models/granite-4.2-3b-Q4_K_M.gguf
+
+# 4. Launch full stack with Docker Compose
 docker compose up -d --build
 ```
+
+> [!TIP]
+> **Corrupted / Truncated Model Fix**: If you ever see `tensor 'blk.32.ffn_down.weight' data is not within the file bounds, model is corrupted or incomplete`, it indicates the model file was cut off mid-download (expected full size: ~2.1 GB / `2,244,011,552` bytes). Delete the incomplete file (`rm -f models/granite-4.2-3b-Q4_K_M.gguf`) and re-run the `wget -c` command above.
 
 ### 3. Open in Browser
 Navigate to **[https://localhost](https://localhost)** in your web browser.

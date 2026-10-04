@@ -66,12 +66,29 @@ services:
       - ./models:/models
     command: >
       sh -c "
-      if [ ! -f /models/${LLM_MODEL_FILE:-granite-4.2-3b-Q4_K_M.gguf} ]; then
-        echo 'Model not found. Downloading via wget...';
-        wget -O /models/${LLM_MODEL_FILE:-granite-4.2-3b-Q4_K_M.gguf} '${HF_DOWNLOAD_URL:-https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/main/granite-4.2-3b-Q4_K_M.gguf?download=true}';
-        echo 'Download complete!';
+      TARGET=\"/models/${LLM_MODEL_FILE:-granite-4.2-3b-Q4_K_M.gguf}\"
+      MIN_BYTES=2000000000
+      if [ -f \"$$TARGET\" ]; then
+        FILE_SIZE=$$(wc -c < \"$$TARGET\" 2>/dev/null || echo 0)
+        if [ \"$$FILE_SIZE\" -ge \"$$MIN_BYTES\" ]; then
+          echo \"Valid model file found ($$FILE_SIZE bytes). Skipping download.\"
+          exit 0
+        else
+          echo \"Detected corrupted or incomplete model file ($$FILE_SIZE bytes < $$MIN_BYTES bytes). Removing...\"
+          rm -f \"$$TARGET\"
+        fi
+      fi
+
+      echo 'Downloading IBM Granite 4.2 3B GGUF model (~2.1 GB)...'
+      apk add --no-cache curl ca-certificates > /dev/null 2>&1 || true
+      if curl -f -L -C - --retry 3 --retry-delay 2 -o \"$$TARGET.tmp\" '${HF_DOWNLOAD_URL:-https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/main/granite-4.2-3b-Q4_K_M.gguf?download=true}'; then
+        mv \"$$TARGET.tmp\" \"$$TARGET\"
+        echo 'Model download and verification complete!'
       else
-        echo 'Model already exists. Skipping download.';
+        rm -f \"$$TARGET.tmp\"
+        echo 'Automated download failed (egress/network limitation).'
+        echo 'Please manually run the wget command from README.md before starting Docker Compose.'
+        exit 1
       fi
       "
 
