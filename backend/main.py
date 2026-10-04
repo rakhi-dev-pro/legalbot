@@ -66,11 +66,12 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Enable CORS with explicit allowed origins (replaces insecure wildcard *)
+# Enable CORS with explicit allowed origins and dynamic regex for Codespaces & cloud domains
 allowed_origins = [orig.strip() for orig in settings.CORS_ORIGINS.split(",") if orig.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
