@@ -7,6 +7,7 @@ services:
     build:
       context: ./nginx
       dockerfile: Dockerfile
+
     container_name: legalbot_proxy
     restart: unless-stopped
 
@@ -22,10 +23,11 @@ services:
 
 
   # ============================================================
-  # 2. POSTGRESQL + PGVECTOR
+  # 2. POSTGRESQL 17 + PGVECTOR
   # ============================================================
   postgres:
     image: pgvector/pgvector:pg17
+
     container_name: legalbot_db
     restart: unless-stopped
 
@@ -51,10 +53,11 @@ services:
 
 
   # ============================================================
-  # 3. REDIS
+  # 3. REDIS 7
   # ============================================================
   redis:
     image: redis:7-alpine
+
     container_name: legalbot_redis
     restart: unless-stopped
 
@@ -72,13 +75,17 @@ services:
   # ============================================================
   # 4. LLM MODEL DOWNLOADER
   #
-  # Downloads the GGUF only if it doesn't already exist.
-  # The model is stored in ./models on the Codespace host.
+  # This container:
+  #   - Checks whether the GGUF already exists
+  #   - Downloads it from Hugging Face if missing
+  #   - Stores it in ./models
+  #   - Exits successfully when finished
   #
-  # This container exits successfully after downloading.
+  # llama.cpp waits for this container to finish successfully.
   # ============================================================
   llm-model:
     image: alpine:3.20
+
     container_name: legalbot_llm_model
 
     restart: "no"
@@ -91,112 +98,137 @@ services:
     volumes:
       - ./models:/models
 
-    command:
+    entrypoint:
       - /bin/sh
       - -c
-      - |
-        set -eu
 
-        echo ""
-        echo "=============================================="
-        echo " LegalBot - LLM Model Downloader"
-        echo "=============================================="
-        echo ""
+    command: |
+      set -eu
 
-        MODEL="/models/$${LLM_MODEL_FILE}"
-        TEMP="$${MODEL}.download"
+      echo ""
+      echo "=============================================="
+      echo " LegalBot - LLM Model Downloader"
+      echo "=============================================="
+      echo ""
 
-        echo "Model file:"
-        echo "$${MODEL}"
-        echo ""
+      MODEL="/models/$${LLM_MODEL_FILE}"
+      TEMP="/models/$${LLM_MODEL_FILE}.download"
 
-        mkdir -p /models
+      echo "Model:  $${LLM_MODEL_FILE}"
+      echo "Target: $${MODEL}"
+      echo ""
 
-        # --------------------------------------------------------
-        # Model already exists
-        # --------------------------------------------------------
-        if [ -f "$${MODEL}" ] && [ -s "$${MODEL}" ]; then
+      mkdir -p /models
+
+      # --------------------------------------------------------
+      # Check if model already exists
+      # --------------------------------------------------------
+      if [ -f "$${MODEL}" ] && [ -s "$${MODEL}" ]; then
 
           echo "[LLM] Model already exists."
           echo ""
+
           ls -lh "$${MODEL}"
 
           echo ""
           echo "[LLM] Skipping download."
 
           exit 0
-        fi
+      fi
 
-        # --------------------------------------------------------
-        # Download model
-        # --------------------------------------------------------
-        echo "[LLM] Model not found."
-        echo "[LLM] Starting download..."
-        echo ""
-        echo "URL:"
-        echo "$${HF_DOWNLOAD_URL}"
-        echo ""
+      # --------------------------------------------------------
+      # Model does not exist
+      # --------------------------------------------------------
+      echo "[LLM] Model not found."
+      echo "[LLM] Installing curl..."
 
-        rm -f "$${TEMP}"
+      apk add --no-cache curl ca-certificates
 
-        apk add --no-cache curl ca-certificates
+      echo ""
+      echo "[LLM] curl version:"
+      curl --version
 
-        echo ""
-        echo "[LLM] Downloading..."
-        echo ""
+      echo ""
+      echo "[LLM] Download URL:"
+      echo "$${HF_DOWNLOAD_URL}"
 
-        curl \
-          --fail \
-          --location \
-          --retry 5 \
-          --retry-delay 5 \
-          --connect-timeout 30 \
-          --max-time 7200 \
-          --progress-bar \
-          --output "$${TEMP}" \
-          "$${HF_DOWNLOAD_URL}"
+      echo ""
+      echo "[LLM] Starting download..."
+      echo ""
 
-        # --------------------------------------------------------
-        # Verify download
-        # --------------------------------------------------------
-        echo ""
-        echo "[LLM] Verifying downloaded file..."
+      rm -f "$${TEMP}"
 
-        if [ ! -f "$${TEMP}" ]; then
-          echo "[LLM] ERROR: Downloaded file does not exist."
+      curl \
+        --location \
+        --fail \
+        --show-error \
+        --retry 5 \
+        --retry-delay 5 \
+        --connect-timeout 30 \
+        --max-time 7200 \
+        --progress-bar \
+        --output "$${TEMP}" \
+        "$${HF_DOWNLOAD_URL}"
+
+      echo ""
+      echo "[LLM] curl completed."
+
+      # --------------------------------------------------------
+      # Verify download
+      # --------------------------------------------------------
+      if [ ! -f "$${TEMP}" ]; then
+          echo "[LLM] ERROR: Downloaded file was not created."
           exit 1
-        fi
+      fi
 
-        if [ ! -s "$${TEMP}" ]; then
-          echo "[LLM] ERROR: Downloaded file is empty."
+      SIZE=$$(wc -c < "$${TEMP}")
+
+      echo "[LLM] Downloaded bytes: $${SIZE}"
+
+      # Granite 4.2 3B Q4 should be around 2 GB.
+      # Reject obviously invalid responses such as an HTML error page.
+      if [ "$${SIZE}" -lt 1000000 ]; then
+
+          echo ""
+          echo "[LLM] ERROR: Downloaded file is suspiciously small."
+          echo "[LLM] First 500 bytes of response:"
+          echo ""
+
+          head -c 500 "$${TEMP}" || true
+
+          echo ""
+          echo ""
+
           rm -f "$${TEMP}"
+
           exit 1
-        fi
+      fi
 
-        # --------------------------------------------------------
-        # Atomically move into place
-        # --------------------------------------------------------
-        mv "$${TEMP}" "$${MODEL}"
+      # --------------------------------------------------------
+      # Atomically move completed download
+      # --------------------------------------------------------
+      mv "$${TEMP}" "$${MODEL}"
 
-        echo ""
-        echo "=============================================="
-        echo " Model download complete"
-        echo "=============================================="
-        echo ""
+      echo ""
+      echo "=============================================="
+      echo " MODEL DOWNLOAD COMPLETE"
+      echo "=============================================="
+      echo ""
 
-        ls -lh "$${MODEL}"
+      ls -lh "$${MODEL}"
 
-        echo ""
-        echo "[LLM] Model is ready."
+      echo ""
+      echo "[LLM] Model is ready."
 
 
   # ============================================================
   # 5. LLAMA.CPP SERVER
   #
-  # Starts ONLY after llm-model has successfully completed.
+  # Starts only after llm-model exits successfully.
   # ============================================================
   llm-service:
     image: ghcr.io/ggml-org/llama.cpp:server
+
     container_name: legalbot_llm
     restart: unless-stopped
 
@@ -303,10 +335,11 @@ services:
         condition: service_healthy
 
 
-# ==============================================================
-# PERSISTENT VOLUMES
-# ==============================================================
-
+# ============================================================
+# PERSISTENT DOCKER VOLUMES
+# ============================================================
 volumes:
+
   pgdata:
+
   redisdata:
