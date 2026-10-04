@@ -7,63 +7,47 @@ services:
     build:
       context: ./nginx
       dockerfile: Dockerfile
-
     container_name: legalbot_proxy
     restart: unless-stopped
-
     ports:
       - "80:80"
       - "443:443"
-
     depends_on:
       backend:
         condition: service_healthy
       frontend:
         condition: service_started
 
-
   # ============================================================
   # 2. POSTGRESQL 17 + PGVECTOR
   # ============================================================
   postgres:
     image: pgvector/pgvector:pg17
-
     container_name: legalbot_db
     restart: unless-stopped
-
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-legalbot}
       POSTGRES_USER: ${POSTGRES_USER:-legal_admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-legalbot_secure_pass_2026}
-
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-legal_admin} -d ${POSTGRES_DB:-legalbot}"
-        ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-legal_admin} -d ${POSTGRES_DB:-legalbot}"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
-
 
   # ============================================================
   # 3. REDIS 7
   # ============================================================
   redis:
     image: redis:7-alpine
-
     container_name: legalbot_redis
     restart: unless-stopped
-
     volumes:
       - redisdata:/data
-
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -71,169 +55,50 @@ services:
       retries: 10
       start_period: 5s
 
-
   # ============================================================
-  # 4. LLM MODEL DOWNLOADER
-  #
-  # This container:
-  #   - Checks whether the GGUF already exists
-  #   - Downloads it from Hugging Face if missing
-  #   - Stores it in ./models
-  #   - Exits successfully when finished
-  #
-  # llama.cpp waits for this container to finish successfully.
+  # 4. SIMPLE MODEL DOWNLOADER
   # ============================================================
-  llm-model:
-    image: curlimages/curl:latest
-
-    container_name: legalbot_llm_model
-
+  model-downloader:
+    image: alpine:latest
+    container_name: legalbot_model_downloader
     restart: "no"
-    user: "0:0"
-
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-
-    environment:
-      LLM_MODEL_FILE: ${LLM_MODEL_FILE:-granite-4.2-3b-Q4_K_M.gguf}
-
-      HF_DOWNLOAD_URL: ${HF_DOWNLOAD_URL:-https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/main/granite-4.2-3b-Q4_K_M.gguf?download=true}
-
     volumes:
       - ./models:/models
-
-    entrypoint: ["/bin/sh", "-c"]
-
-    command:
-      - |
-        set -eu
-
-        echo ""
-        echo "=============================================="
-        echo " LegalBot - LLM Model Downloader"
-        echo "=============================================="
-        echo ""
-
-        MODEL="/models/$${LLM_MODEL_FILE}"
-        TEMP="/models/$${LLM_MODEL_FILE}.download"
-
-        echo "Model:  $${LLM_MODEL_FILE}"
-        echo "Target: $${MODEL}"
-        echo ""
-
-        mkdir -p /models
-
-        # --------------------------------------------------------
-        # Check if model already exists
-        # --------------------------------------------------------
-        if [ -f "$${MODEL}" ] && [ -s "$${MODEL}" ]; then
-            echo "[LLM] Model already exists ($${MODEL})."
-            echo ""
-            ls -lh "$${MODEL}"
-            echo ""
-            echo "[LLM] Skipping download."
-            exit 0
-        fi
-
-        # --------------------------------------------------------
-        # Model does not exist - download from Hugging Face
-        # --------------------------------------------------------
-        echo "[LLM] Model not found: $${MODEL}"
-        echo ""
-        echo "[LLM] Download URL: $${HF_DOWNLOAD_URL}"
-        echo "[LLM] Starting download via curl..."
-        echo ""
-
-        rm -f "$${TEMP}"
-
-        curl \
-          --location \
-          --fail \
-          --show-error \
-          --retry 5 \
-          --retry-delay 5 \
-          --connect-timeout 30 \
-          --max-time 7200 \
-          --progress-bar \
-          --output "$${TEMP}" \
-          "$${HF_DOWNLOAD_URL}"
-
-        echo ""
-        echo "[LLM] Download completed."
-
-        # --------------------------------------------------------
-        # Verify download
-        # --------------------------------------------------------
-        if [ ! -f "$${TEMP}" ]; then
-            echo "[LLM] ERROR: Downloaded file was not created."
-            exit 1
-        fi
-
-        SIZE=$$(wc -c < "$${TEMP}")
-        echo "[LLM] Downloaded bytes: $${SIZE}"
-
-        if [ "$${SIZE}" -lt 1000000 ]; then
-            echo ""
-            echo "[LLM] ERROR: Downloaded file is suspiciously small ($${SIZE} bytes)."
-            echo "[LLM] First 500 bytes of response:"
-            echo ""
-            head -c 500 "$${TEMP}" || true
-            echo ""
-            rm -f "$${TEMP}"
-            exit 1
-        fi
-
-        # --------------------------------------------------------
-        # Atomically move completed download
-        # --------------------------------------------------------
-        mv "$${TEMP}" "$${MODEL}"
-
-        echo ""
-        echo "=============================================="
-        echo " MODEL DOWNLOAD COMPLETE"
-        echo "=============================================="
-        echo ""
-        ls -lh "$${MODEL}"
-        echo ""
-        echo "[LLM] Model is ready."
-
+    command: >
+      sh -c "
+      if [ ! -f /models/${LLM_MODEL_FILE:-granite-4.2-3b-Q4_K_M.gguf} ]; then
+        echo 'Model not found. Downloading via wget...';
+        wget -O /models/${LLM_MODEL_FILE:-granite-4.2-3b-Q4_K_M.gguf} '${HF_DOWNLOAD_URL:-https://huggingface.co/ibm-granite/granite-4.2-3b-GGUF/resolve/main/granite-4.2-3b-Q4_K_M.gguf?download=true}';
+        echo 'Download complete!';
+      else
+        echo 'Model already exists. Skipping download.';
+      fi
+      "
 
   # ============================================================
-  # 5. LLAMA.CPP SERVER
-  #
-  # Starts only after llm-model exits successfully.
+  # 5. LLAMA.CPP SERVER 
   # ============================================================
   llm-service:
     image: ghcr.io/ggml-org/llama.cpp:server
-
     container_name: legalbot_llm
     restart: unless-stopped
-
     depends_on:
-      llm-model:
+      model-downloader:
         condition: service_completed_successfully
-
     volumes:
       - ./models:/models:ro
-
     environment:
       LLM_MODEL_FILE: ${LLM_MODEL_FILE:-granite-4.2-3b-Q4_K_M.gguf}
       LLM_CTX_SIZE: ${LLM_CTX_SIZE:-4096}
-
     command:
       - --model
       - /models/${LLM_MODEL_FILE:-granite-4.2-3b-Q4_K_M.gguf}
-
       - --host
       - 0.0.0.0
-
       - --port
       - "8080"
-
       - --ctx-size
       - "${LLM_CTX_SIZE:-4096}"
-
 
   # ============================================================
   # 6. BACKEND - FastAPI
@@ -242,49 +107,31 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
-
     container_name: legalbot_backend
     restart: unless-stopped
-
     ports:
       - "${BACKEND_PORT:-8000}:8000"
-
     volumes:
       - ./backend:/app
-
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-legal_admin}:${POSTGRES_PASSWORD:-legalbot_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-legalbot}
-
       REDIS_URL: redis://redis:6379/0
-
       LLAMA_CPP_URL: http://llm-service:8080
-
       LLM_MODEL_FILE: ${LLM_MODEL_FILE:-granite-4.2-3b-Q4_K_M.gguf}
-
       SECRET_KEY: ${SECRET_KEY:-super_secret_legalbot_jwt_key}
-
     depends_on:
       postgres:
         condition: service_healthy
-
       redis:
         condition: service_healthy
-
       llm-service:
         condition: service_started
-
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "curl -f http://localhost:8000/api/health || exit 1"
-        ]
-
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 8
       start_period: 40s
-
 
   # ============================================================
   # 7. FRONTEND - React + Vite
@@ -293,31 +140,23 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-
     container_name: legalbot_frontend
     restart: unless-stopped
-
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
-
     volumes:
       - ./frontend:/app
       - /app/node_modules
-
     environment:
       CHOKIDAR_USEPOLLING: "true"
       VITE_API_URL: https://localhost
-
     depends_on:
       backend:
         condition: service_healthy
-
 
 # ============================================================
 # PERSISTENT DOCKER VOLUMES
 # ============================================================
 volumes:
-
   pgdata:
-
   redisdata:
